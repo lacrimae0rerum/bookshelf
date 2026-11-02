@@ -119,7 +119,7 @@ flowchart LR
   WORKER["Job worker (Postgres queue)<br/>parse · describe-figure · summarize<br/>distil · brief · derive · embed · link"]:::infra
   CLI["Claude Code CLI (local)<br/>claude -p --model haiku|sonnet|opus<br/>or interactive /skill in a session"]:::infra
 
-  PG[("Supabase Postgres<br/>documents · nodes · notes<br/>artifacts · concepts · edges · jobs")]:::truth
+  PG[("Postgres<br/>documents · nodes · notes<br/>artifacts · concepts · edges · jobs")]:::truth
   QD[("Qdrant<br/>blocks · distills · documents")]:::derived
   EXP["exports/<br/>.md · .json · .csv"]:::derived
 
@@ -142,8 +142,8 @@ flowchart LR
 **Mapping to what exists today**: `backend/` already provides the app factory, settings,
 guardrails, error envelope, and a `books` resource — that resource becomes `documents`.
 `frontend/` is Astro; it stays Astro with React islands (§12). The Qdrant key in `.env` is for
-the index in §10. Postgres is the Supabase project or a self-hosted server (a VM); schema
-changes go through `supabase/migrations/`.
+the index in §10. Postgres is a self-hosted server (a VM); schema changes go through
+`supabase/migrations/` (the folder keeps its old name; the SQL runs on any Postgres 15+).
 
 **PDFs stay in the repo for now** (D13). `library/` holds the originals; ingest takes a path,
 not an upload. `documents.source_path` points at the file, `sha256` guards against duplicates.
@@ -169,7 +169,7 @@ Each decision states the call, the reason, and what it costs.
 | D10 | **Astro shell + React islands, no framework rewrite** | The existing frontend already works; only three surfaces are genuinely interactive | Islands must own their own state; no global client store |
 | D11 | **AI never edits your words** | Your notes are the one irreplaceable artifact | `note.raw` immutable; structured version is a separate derived row |
 | D12 | **No quantization, single Qdrant node** | Hundreds of documents ≈ 10²–10⁵ vectors; quantization adds complexity and recall loss for nothing | Revisit past ~1M vectors |
-| D13 | **Originals live in `library/` inside the repo; ingest by path** | No upload plumbing, no object store, no auth on binaries for a single-user tool | `SourceStore` interface so the swap to S3/Supabase Storage later is one adapter |
+| D13 | **Originals live in `library/` inside the repo; ingest by path** | No upload plumbing, no object store, no auth on binaries for a single-user tool | `SourceStore` interface so the swap to S3 or another object store later is one adapter |
 | D14 | **Summary and distillation are different artifact types** | A summary is short and lossy (what is this about?); a distillation is developed and keeps the load-bearing content (what do I need to retain?) | Two skills, two schemas, two compression bands (§9, §14) |
 | D15 | **Humans and skills author the same artifact types** | You can write a chapter distillation by hand; the system treats it like an approved skill output | `artifacts.origin` = `human` \| `skill:<name>@<v>`; human artifacts skip the grounding gate but still carry `cites` |
 | D16 | **Model ladder: cheapest model that passes the gates** | Exploration and classification are high-volume, low-stakes; briefs and concept linking are the opposite | Every skill declares its tier in `meta.yaml`; `artifacts.model` records what actually ran, so quality vs. cost is measurable per skill |
@@ -183,7 +183,7 @@ Each decision states the call, the reason, and what it costs.
 
 ## 6. Data model
 
-Postgres from day one (Supabase in production, a project-local cluster for dev and tests).
+Postgres from day one (a self-hosted server in production, a project-local cluster for dev and tests).
 The canonical DDL lives in `supabase/migrations/*.sql`; the sketch below is the shape, the
 migrations are the truth (they add check constraints, queue columns and RLS — see §18).
 
@@ -1504,7 +1504,7 @@ flowchart LR
 **Phase 0 — Shelf & reader** *(no AI at all)*
 Drop a PDF in `library/`, parse tiers 1–2 including figure blocks with cropped images, browse the
 tree, read blocks in the reader, highlight, write raw notes, export Markdown and JSON. Rename
-`books` → `documents`, add `nodes` and `notes`, move to Supabase Postgres.
+`books` → `documents`, add `nodes` and `notes`, move to Postgres.
 *Done when*: you can drop in a PDF and read it in the app with your highlights and figures.
 
 **Phase 1 — Distillation**
@@ -1565,7 +1565,7 @@ The design above is a guideline. Where the build diverged, the reason is recorde
 | Area | Planned | Built | Why |
 |---|---|---|---|
 | Job queue | `arq` on Redis | `jobs` table as the queue: `claim()` = `UPDATE … WHERE id = (SELECT … FOR UPDATE SKIP LOCKED)`, exponential backoff, stale-lock reclaim (a live worker heartbeats its running jobs' locks, so only a dead worker's job is reclaimed), partial unique index dedupes *queued* work, and `claim()` holds a queued job back while an identical one runs, so a re-run requested mid-run waits instead of being dropped (migration `20260924023412_dedupe_queued_only`) | One less service; the queue state *is* the domain state the review UI shows (`app/jobs/queue.py`) |
-| Database timing | SQLite in phase 0 | Postgres from the start; schema in `supabase/migrations/`, applied to Supabase via MCP, and by `python -m app.db.migrate` to every other Postgres (local, a self-hosted server), which skips a Supabase database (`supabase_admin` role) | JSONB, `text[]`, FTS and `SKIP LOCKED` are needed immediately; one SQL source for every target |
+| Database timing | SQLite in phase 0 | Postgres from the start; schema in `supabase/migrations/`, applied by `python -m app.db.migrate` to every Postgres (local, a self-hosted server); the runner leaves a Supabase database (`supabase_admin` role) alone, since Supabase tracks its own migrations | JSONB, `text[]`, FTS and `SKIP LOCKED` are needed immediately; one SQL source for every target |
 | Dev database | — | `scripts/pg-local.sh`: isolated cluster in `.pgdata/` on port 54329, trust auth on localhost; tests create a throwaway DB per process | No passwords, no collision with a system Postgres, parallel test runs never share state |
 | Notes ↔ nodes | notes FK to nodes | notes reference only `documents`; re-parse upserts nodes by anchor; a note whose anchor vanished is shown as *detached* | A cascading FK let a re-parse delete notes, violating D11 |
 | D11 enforcement | API rule | plus a `before update` trigger rejecting any change to `notes.raw` | Defence in depth for the one irreplaceable artifact |
@@ -1661,7 +1661,7 @@ waiting are left alone. `pills.auto_generate` (default on) lets a pills feed run
 `auto_derive` choice.
 
 **Database** (`/database`, `app/db/targets.py`, `app/db/sync.py`, `services/database.py`).
-Two databases can be configured: `BOOKSHELF_DATABASE_URL` (the main one: Supabase, or any Postgres server) and
+Two databases can be configured: `BOOKSHELF_DATABASE_URL` (the main one: a Postgres server of your own, such as a VM) and
 `BOOKSHELF_LOCAL_DATABASE_URL` (the `scripts/pg-local.sh` cluster by default; `scripts/dev-backend.sh`
 points it at a Podman Postgres 17, `scripts/pg-podman.sh`, started and stopped with the API). Settings shows both
 side by side and is the switch between them: `PUT /database/active` stops the API's
