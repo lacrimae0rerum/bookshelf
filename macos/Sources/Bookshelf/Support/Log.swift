@@ -4,7 +4,7 @@ import os
 /// `app.log` plus the unified log, subsystem = bundle id (docs/MACOS_APP.md §16).
 enum Log {
     enum Category: String, Sendable {
-        case app, supervisor, window
+        case app, supervisor, window, intake
     }
 
     static func info(_ message: String, _ category: Category = .app) {
