@@ -9,7 +9,10 @@ Environment variables are set before any `app.*` import, because `Settings` is c
 and `app.db.session` builds its engine at import time.
 """
 
+import contextlib
 import os
+import signal
+import subprocess
 import sys
 import tempfile
 import uuid
@@ -96,6 +99,7 @@ from app.core.config import get_settings  # noqa: E402
 from app.db.migrate import migrate  # noqa: E402
 from app.db.session import engine  # noqa: E402
 from app.main import create_app  # noqa: E402
+from app.pipeline import processes  # noqa: E402
 
 migrate(get_settings().database_url)
 
@@ -183,3 +187,49 @@ def client() -> Iterator[TestClient]:
 @pytest.fixture
 def library_dir() -> Path:
     return get_settings().library_dir
+
+
+@pytest.fixture(autouse=True)
+def _job_runs_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A shutdown refuses job runs until the process ends (`processes.refuse_jobs`), and
+    every test client's lifespan ends with one: each test starts accepting them again."""
+    monkeypatch.setattr(processes, "_JOBS_REFUSED", False)
+
+
+class TrackedRuns:
+    """Stand-ins for `claude` runs: a sleep in a session of its own, tracked by
+    `app.pipeline.processes` the way `app.pipeline.runner` tracks the real CLI, either for
+    a job (inside `processes.job_scope()`, as the worker runs one) or for a request."""
+
+    KILLED = -signal.SIGKILL
+
+    def __init__(self, stack: contextlib.ExitStack) -> None:
+        self._stack = stack
+
+    def start(self, *, for_a_job: bool) -> subprocess.Popen[str]:
+        proc = subprocess.Popen(["/bin/sleep", "30"], start_new_session=True, text=True)
+        self._stack.callback(self._reap, proc)
+        with processes.job_scope() if for_a_job else contextlib.nullcontext():
+            self._stack.enter_context(processes.tracked(proc))
+        return proc
+
+    @staticmethod
+    def exit_code(proc: subprocess.Popen[str], *, within: float = 0.5) -> int | None:
+        """The run's exit code once it ends, or None while it is still running then."""
+        try:
+            return proc.wait(timeout=within)
+        except subprocess.TimeoutExpired:
+            return None
+
+    @staticmethod
+    def _reap(proc: subprocess.Popen[str]) -> None:
+        if proc.poll() is None:
+            proc.kill()
+        proc.wait(timeout=5)
+
+
+@pytest.fixture
+def tracked_runs() -> Iterator[TrackedRuns]:
+    """Every run started here is untracked and killed at teardown, whatever the test did."""
+    with contextlib.ExitStack() as stack:
+        yield TrackedRuns(stack)

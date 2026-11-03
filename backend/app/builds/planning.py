@@ -34,6 +34,7 @@ from app.jobs.registry import HandlerResult, JobContext, PermanentJobError
 from app.models import Build, Document, Job
 from app.models.build import BuildState, StopReason
 from app.models.enums import JobState, Origin
+from app.pipeline import processes
 from app.pipeline.gates import schema_errors
 from app.pipeline.handlers.skills import default_runner
 from app.pipeline.runner import (
@@ -171,7 +172,9 @@ def plan_build(session: Session, job: Job, *, runner: ModelRunner, skill: Skill)
     except UsageLimitError:
         raise  # the worker pauses the queue and hands the job back
     except RunnerError as exc:
-        if job.attempts >= job.max_attempts:
+        # A run the shutdown refused or killed is no failure of the build: the job is back
+        # in the queue and plans again in the next process, last attempt or not.
+        if job.attempts >= job.max_attempts and not processes.jobs_refused():
             _fail(session, build_id, f"The planner could not run: {exc}")
         raise
     build = session.get(Build, build_id)

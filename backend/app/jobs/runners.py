@@ -2,7 +2,8 @@
 
 The lifespan starts them; switching databases (Settings → Database) stops them, so every
 running job goes back to the queue of the database it came from, and starts fresh ones
-that claim from the new database.
+that claim from the new database. Shutdown stops them for good (`shutdown`): a switch,
+sync or restore caught by it must not start them again on its way out.
 """
 
 import logging
@@ -15,6 +16,7 @@ from app.jobs.embedded import EmbedRunner
 from app.jobs.narration import NarrateRunner
 from app.jobs.steering import own_slot_kinds
 from app.jobs.worker import Worker, autodiscover
+from app.pipeline import processes
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +40,14 @@ class Runners:
         self.narrate: NarrateRunner | None = None
         self.build: BuildRunner | None = None
         self.jobs: BackgroundWorker | None = None
+        self._shut_down = False
 
     def start(self) -> None:
+        """Start the configured runners; nothing after `shutdown`."""
         settings = self._settings
         with self._lock:
+            if self._shut_down:
+                return
             if settings.qdrant_url is None and settings.api_embed_runner:
                 self.embed = EmbedRunner()
                 self.embed.start()
@@ -56,10 +62,27 @@ class Runners:
                 self.jobs.start()
 
     def stop(self) -> None:
-        """Hand running jobs back to their queue; `claude` and speech runs are killed. A
-        build's agent is not: it runs detached, and the next claim of its job attaches."""
+        """Hand running jobs back to their queue; their `claude` runs are killed (not a
+        request's: `app.pipeline.processes`). A build's agent is not: it runs detached,
+        and the next claim of its job attaches. Idempotent and safe from any thread."""
         with self._lock:
-            stop_all([self.jobs, self.narrate, self.build])
-            if self.embed is not None:
-                self.embed.stop()
-            self.embed = self.narrate = self.build = self.jobs = None
+            self._stop_locked()
+
+    def shutdown(self) -> None:
+        """`stop` for good: the process is going away, so `start` does nothing after it.
+        Every job goes back first (a run killed before its job did would count as a failed
+        attempt); then `processes.refuse_jobs` kills their runs and any that starts late,
+        so the stop never waits on a run (`stop_all` hands back again: a no-op)."""
+        with self._lock:
+            self._shut_down = True
+            for worker in (self.jobs, self.narrate, self.build):
+                if worker is not None:
+                    worker.release()
+            processes.refuse_jobs()
+            self._stop_locked()
+
+    def _stop_locked(self) -> None:
+        stop_all([self.jobs, self.narrate, self.build])
+        if self.embed is not None:
+            self.embed.stop()
+        self.embed = self.narrate = self.build = self.jobs = None
