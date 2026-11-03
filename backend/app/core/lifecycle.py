@@ -6,6 +6,12 @@ timer holds the reload for minutes. `install()` (called from the lifespan startu
 after uvicorn has installed its own handlers) chains SIGINT/SIGTERM so `stopping` is set
 the moment shutdown begins; streams check it on every poll and end cleanly. (`fastapi
 dev` reloads by sending the server process SIGTERM, so this covers reloads too.)
+
+`stopping` takes no lock, because the handler can run inside itself: stopping the process
+group of `uv run fastapi run` (`kill -TERM -- -<pgid>`) gives python the group's SIGTERM
+and `uv` forwards a second one, which can interrupt the first handler mid-`set()`. A
+`threading.Event` would block that nested handler forever on the lock the outer call
+holds, so uvicorn would never hear of the shutdown.
 """
 
 import signal
@@ -13,7 +19,26 @@ import threading
 from collections.abc import Callable
 from types import FrameType
 
-stopping = threading.Event()
+
+class ShutdownFlag:
+    """The `set`/`clear`/`is_set` of `threading.Event` without its lock (and so without
+    `wait`): a plain attribute store never blocks, so a signal handler interrupted by
+    another signal can set it again safely."""
+
+    def __init__(self) -> None:
+        self._is_set = False
+
+    def set(self) -> None:
+        self._is_set = True
+
+    def clear(self) -> None:
+        self._is_set = False
+
+    def is_set(self) -> bool:
+        return self._is_set
+
+
+stopping = ShutdownFlag()
 
 _SIGNALS = (signal.SIGINT, signal.SIGTERM)
 
