@@ -16,6 +16,7 @@ from app.jobs.embedded import EmbedRunner
 from app.jobs.narration import NarrateRunner
 from app.jobs.steering import own_slot_kinds
 from app.jobs.worker import Worker, autodiscover
+from app.pipeline import processes
 
 logger = logging.getLogger(__name__)
 
@@ -68,9 +69,16 @@ class Runners:
             self._stop_locked()
 
     def shutdown(self) -> None:
-        """`stop` for good: the process is going away, so `start` does nothing after it."""
+        """`stop` for good: the process is going away, so `start` does nothing after it.
+        Every job goes back first (a run killed before its job did would count as a failed
+        attempt); then `processes.refuse_jobs` kills their runs and any that starts late,
+        so the stop never waits on a run (`stop_all` hands back again: a no-op)."""
         with self._lock:
             self._shut_down = True
+            for worker in (self.jobs, self.narrate, self.build):
+                if worker is not None:
+                    worker.release()
+            processes.refuse_jobs()
             self._stop_locked()
 
     def _stop_locked(self) -> None:

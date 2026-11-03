@@ -36,7 +36,7 @@ from app.core.config import Settings, get_settings
 from app.models.enums import Tier
 from app.pipeline.cli_stream import pump, result_line
 from app.pipeline.models import cli_alias, cli_effort
-from app.pipeline.processes import kill_group, tracked
+from app.pipeline.processes import jobs_refused, kill_group, tracked
 from app.telemetry import run_log
 
 _FENCE = re.compile(r"^\s*```[a-zA-Z0-9_-]*\s*\n(.*?)\n\s*```\s*$", re.DOTALL)
@@ -346,6 +346,8 @@ class ClaudeCliRunner:
         return parse_envelope(stdout, duration_ms=elapsed)
 
     def _execute(self, argv: list[str], prompt: str, cwd: str) -> str:
+        if jobs_refused():  # the shutdown handed this job back while it waited for a slot
+            raise RunnerError("not started: the API is shutting down", reached_model=False)
         try:
             proc = subprocess.Popen(  # noqa: S603  (argv is built here, never from input)
                 argv,

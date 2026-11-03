@@ -11,6 +11,7 @@ from app.jobs.registry import PermanentJobError, get_handler
 from app.models import Build, Document, Job
 from app.models.build import BuildState, StopReason
 from app.models.enums import JobKind, JobState, Origin
+from app.pipeline import processes
 from app.pipeline.runner import FakeRunner, RunnerError
 from app.pipeline.skills import Skill, load_skill
 from app.schemas.builds import BuildCreate
@@ -84,6 +85,23 @@ def test_a_runner_error_fails_the_build_only_on_the_last_attempt(session: Sessio
             planning.plan_build(session, job, runner=FakeRunner(broken), skill=skill)
         session.refresh(build)
         assert build.state is expected
+
+
+def test_a_run_the_shutdown_refused_or_killed_never_fails_the_build(session: Session, skill: Skill):
+    """The shutdown hands the job back to the queue; the build must still be planning when
+    it runs again in the next process, even on what was its last attempt."""
+    build, job = new_build(session)
+    job.attempts = job.max_attempts
+    processes.refuse_jobs()  # what `Runners.shutdown()` does once the jobs are handed back
+
+    def killed(prompt: str) -> str:
+        raise RunnerError("claude exited with -9")
+
+    with processes.job_scope(), pytest.raises(RunnerError):
+        planning.plan_build(session, job, runner=FakeRunner(killed), skill=skill)
+
+    session.refresh(build)
+    assert build.state is BuildState.PLANNING
 
 
 def test_a_deleted_or_moved_on_build_is_skipped(session: Session, skill: Skill):

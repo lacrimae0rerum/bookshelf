@@ -14,6 +14,7 @@ import pytest
 
 from app.core.config import Settings
 from app.models.enums import Tier
+from app.pipeline import processes
 from app.pipeline.runner import (
     ClaudeCliRunner,
     FakeRunner,
@@ -290,6 +291,26 @@ def test_vision_runs_get_only_the_read_tool_scoped_to_the_image_dir(fake_claude,
     assert argv[-6:] == [
         "--tools", "Read", "--allowedTools", "Read", "--add-dir", str(image.parent.resolve()),
     ]  # fmt: skip
+
+
+def test_a_job_run_refused_by_the_shutdown_never_starts_the_cli(fake_claude, tmp_path):
+    script = fake_claude(PRINT_ENVELOPE)
+    processes.refuse_jobs()
+
+    with processes.job_scope(), pytest.raises(RunnerError) as refused:
+        cli(script).run("Distil this.", tier=Tier.DISTIL)
+
+    assert not refused.value.reached_model  # the run ceiling gives the run back
+    assert not (tmp_path / "pid").exists()
+
+
+def test_a_request_run_still_runs_after_the_shutdown(fake_claude):
+    script = fake_claude(PRINT_ENVELOPE)
+    processes.refuse_jobs()
+
+    result = cli(script).run("Distil this.", tier=Tier.DISTIL)
+
+    assert result.model == "claude-haiku-4-5-20251001"
 
 
 def test_non_zero_exit_raises_with_stderr(fake_claude):

@@ -189,6 +189,13 @@ def library_dir() -> Path:
     return get_settings().library_dir
 
 
+@pytest.fixture(autouse=True)
+def _job_runs_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A shutdown refuses job runs until the process ends (`processes.refuse_jobs`), and
+    every test client's lifespan ends with one: each test starts accepting them again."""
+    monkeypatch.setattr(processes, "_JOBS_REFUSED", False)
+
+
 class TrackedRuns:
     """Stand-ins for `claude` runs: a sleep in a session of its own, tracked by
     `app.pipeline.processes` the way `app.pipeline.runner` tracks the real CLI, either for
