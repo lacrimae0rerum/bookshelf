@@ -6,7 +6,7 @@
 #
 # Signs with the "Bookshelf Local" code-signing identity when the login keychain has it,
 # else ad-hoc. An ad-hoc signature changes with every build, so macOS may ask for
-# permissions again after a rebuild. This script never creates the identity.
+# permissions again after a rebuild. make-signing-identity.sh creates the identity, once.
 set -euo pipefail
 
 MACOS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -49,6 +49,7 @@ if security find-identity -p codesigning 2>/dev/null | grep -q '"Bookshelf Local
 else
   echo "warning: no \"Bookshelf Local\" identity in the keychain; signing ad-hoc." >&2
   echo "         macOS may ask for permissions again after each rebuild." >&2
+  echo "         Create the identity once with macos/scripts/make-signing-identity.sh." >&2
 fi
 echo "→ codesign ($IDENTITY)"
 codesign --force --sign "$IDENTITY" "$APP"

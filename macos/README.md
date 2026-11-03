@@ -8,6 +8,7 @@ decisions: [docs/MACOS_APP.md](../docs/MACOS_APP.md) and
 ## Build, install, test
 
 ```bash
+macos/scripts/make-signing-identity.sh   # once: the self-signed "Bookshelf Local" identity in the login keychain
 macos/scripts/build-app.sh     # swift build → bundle → placeholder icon → codesign → macos/build/Bookshelf.app
 macos/scripts/install-app.sh   # quit the running copy (⌘Q path), ditto to ~/Applications, lsregister, open
 macos/scripts/smoke.sh         # build, then launch with env -i … open -n and check start, ⌘Q, Force Quit, SIGINT
@@ -15,7 +16,8 @@ cd macos && swift test         # unit tests (Swift Testing), under a second
 ```
 
 - Signing: the "Bookshelf Local" identity when the login keychain has it, else ad-hoc
-  (the build says so). No script creates the identity.
+  (the build says so). With it, the designated requirement is the certificate, not the
+  binary's hash, so macOS keeps the app's permissions across rebuilds (M11).
 - The smoke test uses a fake `claude` that never answers; it never runs the real one, and
   it never stops Postgres. It refuses to run while Bookshelf runs or 8000/4321 are taken.
 - The app reads the repo path that `build-app.sh` writes into Info.plist
