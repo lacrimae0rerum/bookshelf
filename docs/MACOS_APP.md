@@ -1,6 +1,6 @@
 # Bookshelf for macOS — a native launcher
 
-**Status**: accepted; P0 done, P1 next (not built) · **Date**: 2026-11-03 · **Extends**: [ARCHITECTURE.md](ARCHITECTURE.md) · **Decision**: [ADR-001](adr/ADR-001-native-macos-launcher-for-bookshelf.md)
+**Status**: accepted; P0 and P1 done, P2 next · **Date**: 2026-11-03 · **Extends**: [ARCHITECTURE.md](ARCHITECTURE.md) · **Decision**: [ADR-001](adr/ADR-001-native-macos-launcher-for-bookshelf.md)
 
 `Bookshelf.app` is a small native app for one Mac. Opening it starts the three local services
 (Postgres, the FastAPI API, the Astro server), shows the web UI in its own window, and stops
@@ -99,8 +99,9 @@ launch ─► resolve repo ─► capture PATH ─► check tools ─► reconci
    once; uvicorn then waits for open requests (a `/search/answer` can take up to 180 s).
    After 5 s the guard sends SIGINT: uvicorn forces the exit and the API kills every run
    left, the requests' too. After 1 s more, SIGKILL to the group. With no request open, the
-   stop takes 0.2–0.3 s and leaves no `claude` behind **(measured)**; the SIGINT step
-   follows from the P0 fixes and is checked in P1 **(unverified)**.
+   stop takes 0.2–0.3 s and leaves no `claude` behind **(measured)**. With a
+   `/search/answer` open, uvicorn waits, the SIGINT at 5 s ends the answer's `claude`,
+   and the app quits after 5.3–5.4 s with nothing left **(measured, P1 smoke)**.
 4. Postgres keeps running (the default). With *Keep the database running after quit* off:
    `scripts/pg-local.sh stop` (`pg_ctl -w stop`, fast mode).
 5. `reply(toApplicationShouldTerminate: true)`. Total budget 7 s; after that, kill and quit.
@@ -518,7 +519,7 @@ macos/
 | Phase | Delivers | Done when |
 |---|---|---|
 | **P0** prerequisites — **done** (2026-11-03) | The API's shutdown, made safe for a supervisor: the signal handler never blocks (`b28ae80`); the first signal stops the jobs' runs and a forced exit the requests' too (`d782745`); job runs that start after that are refused (`d39b8cc`). Also the `scripts/pg-local.sh` comment (`224f831`) and a flaky catalogue test (`e9af837`) | Met: 0 of 32 group SIGTERMs hang (6 of 16 before); one SIGTERM stops the API in 0.2 s with no `claude` left (5 s, SIGKILL and 2 orphans before) |
-| **P1** core | Supervisor, guards, environment, loading and error views, window, menus, quit flow, logs, build/sign/install scripts, a placeholder icon | Opened from Finder: ready in ≤ 5 s warm; ⌘Q leaves nothing on 8000/4321; Force Quit leaves nothing on 8000/4321 within 1 s |
+| **P1** core — **done** (2026-11-03; UAT passed, Fer, 2026-11-04, installed in `~/Applications`) | Supervisor, guards, environment, loading and error views, window, menus, quit flow, logs, build/sign/install scripts, a placeholder icon. Signed with "Bookshelf Local" (`make-signing-identity.sh`, made 2026-11-03): the designated requirement is the certificate leaf. The web is built only when `dist/` is missing or on *Rebuild Web* (fingerprints: P2) | Met (`macos/scripts/smoke.sh`, `env -i … open -n`, fake `claude`): page shown 1.5–1.7 s after `open` warm; ⌘Q leaves nothing on 8000/4321; SIGKILL to the app frees them in 0.09–0.17 s and, with an answer open, its `claude` ends at the SIGINT step (5.3 s), no orphans. Known gap: a `pg-local.sh start` or `astro build` still running at quit is not stopped |
 | **P2** integration | Menu bar icon, Dock menu and badge, intake (Dock, Finder, ⌘O, window drop), notifications, Settings, fingerprints and rebuilds, restarts, sleep/wake | A PDF dropped on the Dock icon appears on the shelf; a failed job notifies; a frontend edit triggers a rebuild at the next launch |
 | **P3** polish | Icon Composer icon, URL scheme, AppleScript, open at login, find/print checks, full-bleed title bar, optional development mode | `osascript … get status` answers; the icon renders in light, dark and tinted |
 
@@ -538,8 +539,8 @@ macos/
 - How long logout waits for `.terminateLater`.
 - The Dock icon cache after replacing the app in `~/Applications`.
 - `books.vertical.fill` and `pause.circle` as template images.
-- The stop's SIGINT step (§3) with a `/search/answer` open: the answer's `claude` must be
-  gone before the SIGKILL.
+- ~~The stop's SIGINT step (§3) with a `/search/answer` open~~: checked in P1; the
+  answer's `claude` is gone at the SIGINT step, before the SIGKILL.
 - Known, accepted gaps from P0: a job run can escape for a few milliseconds if the API
   dies between its slot check and its registration; build agents and narrations run
   detached by design and survive the API.

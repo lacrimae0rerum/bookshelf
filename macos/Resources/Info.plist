@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Bookshelf.app (docs/MACOS_APP.md §18). macos/scripts/build-app.sh fills in the version,
+  the build number, the commit and the repository path. NSSupportsSuddenTermination and
+  NSSupportsAutomaticTermination are left out on purpose: either lets macOS kill the app
+  without asking it, and the services would not be stopped.
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>io.github.lacrimae0rerum.bookshelf</string>
+	<key>CFBundleName</key>
+	<string>Bookshelf</string>
+	<key>CFBundleDisplayName</key>
+	<string>Bookshelf</string>
+	<key>CFBundleExecutable</key>
+	<string>Bookshelf</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>0</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.education</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>BookshelfRepositoryPath</key>
+	<string></string>
+	<key>BookshelfCommit</key>
+	<string></string>
+</dict>
+</plist>
