@@ -1,0 +1,6 @@
+# Anchored, and Build/ (sources) kept: the root .gitignore drops every build/, and on a
+# case-insensitive disk that pattern takes Sources/Bookshelf/Build/ too.
+/.build/
+/build/
+/.swiftpm/
+!/Sources/Bookshelf/Build/
