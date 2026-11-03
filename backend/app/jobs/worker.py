@@ -59,6 +59,7 @@ from app.jobs.registry import (
 )
 from app.models import Job
 from app.models.enums import JobKind, JobState
+from app.pipeline import processes
 from app.pipeline.runner import UsageLimitError
 from app.telemetry import run_log
 
@@ -168,13 +169,13 @@ class Worker:
         return released
 
     def abandon(self) -> int:
-        """Stop now: `release_held`, then kill the `claude` (and speech model) runs working
-        on the jobs. Returns how many jobs went back."""
-        from app.pipeline.processes import terminate_all
-
-        released = self.release_held()
-        terminate_all()
-        return released
+        """Stop now: `release_held`, then kill the `claude` runs of the process's jobs
+        (`processes.terminate_jobs`; a request's run is left to finish), even when handing
+        the jobs back failed. Returns how many jobs went back."""
+        try:
+            return self.release_held()
+        finally:
+            processes.terminate_jobs()
 
     def _is_released(self, job_id: uuid.UUID) -> bool:
         with self._lock:
@@ -215,14 +216,15 @@ class Worker:
                 logger.warning("Job heartbeat failed", extra={"job_id": str(job_id)}, exc_info=True)
 
     def execute(self, job: Job) -> JobState:
-        """Run one claimed job to its next state, in a fresh session, renewing its lock."""
+        """Run one claimed job to its next state, in a fresh session, renewing its lock.
+        The runs its handler starts belong to the job (`processes.job_scope`)."""
         done = threading.Event()
         beat = threading.Thread(
             target=self._beat, args=(job.id, done), name=f"heartbeat-{job.id}", daemon=True
         )
         beat.start()
         try:
-            with run_log.job_log(job.id, attempt=job.attempts):
+            with run_log.job_log(job.id, attempt=job.attempts), processes.job_scope():
                 return self._execute(job)
         finally:
             done.set()

@@ -24,6 +24,7 @@ from app.core.middleware import MaxBodySizeMiddleware, RequestContextMiddleware
 from app.core.ratelimit import RateLimitMiddleware
 from app.core.security import API_KEY_HEADER
 from app.jobs.runners import Runners
+from app.pipeline import processes
 from app.retrieval.client import close_client
 
 logger = logging.getLogger(__name__)
@@ -51,15 +52,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "auth_required": settings.auth_required,
         },
     )
-    restore_signals = lifecycle.install()  # SSE streams end as soon as shutdown begins
     runners = Runners(settings)
     app.state.runners = runners  # Settings → Database restarts them on a switch
     runners.start()
+    # SSE streams end as soon as shutdown begins and the runners stop at once; a forced
+    # exit kills the requests' runs too. It can make uvicorn skip the rest of this function
+    # (`app.core.lifecycle`).
+    restore_signals = lifecycle.install(
+        on_shutdown=runners.shutdown, on_force=processes.terminate_all
+    )
     try:
         yield
     finally:
-        restore_signals()
-        runners.stop()  # jobs back to the queue; `claude` and speech killed
+        restore_signals()  # waits for what the signals started
+        runners.shutdown()  # jobs back to the queue, their runs killed; a no-op after a signal
+        processes.terminate_all()  # every run left (the requests' too), as always
         close_client()  # release the embedded store's lock before a reload reopens it
         logger.info("Application stopped")
 

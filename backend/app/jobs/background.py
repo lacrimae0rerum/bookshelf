@@ -79,8 +79,8 @@ class BackgroundWorker:
 def stop_all(workers: Sequence[BackgroundWorker | None]) -> None:
     """Stop several workers of one process, handing their running jobs back.
 
-    Every worker releases its jobs before any is abandoned: abandoning kills every tracked
-    subprocess of the process (`claude` runs, the speech model), and one still held by
+    Every worker releases its jobs before any is abandoned: abandoning kills the tracked
+    runs of every job of the process (`processes.terminate_jobs`), and one still held by
     another worker would be recorded as a failed attempt instead of going back untouched.
     """
     live = [worker for worker in workers if worker is not None]
