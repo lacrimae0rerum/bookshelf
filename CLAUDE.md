@@ -7,7 +7,7 @@
   - `@docs/fastapi/DOCS_MAP.md`
   as the primary documentation sources.
 
-- For Supabase, use the Supabase MCP for all database operations, schema management, migrations, and data access whenever possible.
+- For Postgres, change the schema only through new SQL files in `supabase/migrations/`, applied with `cd backend && uv run python -m app.db.migrate`.
 - For Qdrant, use the available skills/tools to manage collections, vectors, indexing, querying, and related operations instead of building custom solutions.
 
 - Do not reinvent the wheel. Prefer best-in-class, well-maintained libraries over custom implementations. Ask for permission before adding new dependencies.

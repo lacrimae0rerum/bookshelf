@@ -47,7 +47,7 @@ flowchart LR
 | :--- | :--- | :--- |
 | **[Python](https://www.python.org) + [uv](https://docs.astral.sh/uv/)** | Python `≥ 3.12` | FastAPI backend, parser & job worker |
 | **[Node.js](https://nodejs.org) + [pnpm](https://pnpm.io/)** | Node `≥ 22.12` | Astro + React frontend |
-| **[PostgreSQL](https://www.postgresql.org)** | `15+` server binaries | Local DB in `.pgdata/` (or use Podman / Supabase) |
+| **[PostgreSQL](https://www.postgresql.org)** | `15+` server binaries | Local DB in `.pgdata/` (or use Podman, or a server of your own) |
 | **[Claude Code](https://docs.claude.com/en/docs/claude-code)** | Logged in (`claude` → `/login`) | Runs all distillation skills & build agents |
 
 ---
@@ -123,18 +123,6 @@ bookshelf/
 ## ⚙️ Deployment & infrastructure
 
 <details>
-<summary><b>🟢 Pointing at Supabase</b></summary>
-
-1. Apply migrations in `supabase/migrations/` via the Supabase MCP (`apply_migration`) or CLI (`supabase link && supabase db push`).
-2. Set the **Session pooler** connection string (Project → Connect → Session pooler) in `backend/.env`:
-   ```ini
-   BOOKSHELF_DATABASE_URL=postgresql+psycopg://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
-   ```
-
-Row-Level Security (RLS) is enabled with zero grants to `anon` or `authenticated` — only the backend reads and writes.
-</details>
-
-<details>
 <summary><b>🐘 Pointing at your own Postgres server (VM)</b></summary>
 
 Any PostgreSQL 15+ instance works out of the box:
@@ -156,7 +144,7 @@ Any PostgreSQL 15+ instance works out of the box:
    PGUSER=bookshelf
    PGPASSWORD=<password>
    ```
-3. Run `cd backend && uv run python -m app.db.migrate` (automatically skips Supabase-managed databases by detecting `supabase_admin`).
+3. Run `cd backend && uv run python -m app.db.migrate`.
 4. Use **Settings → Database** in the UI to sync your local database up to the server or restore a snapshot.
 </details>
 

@@ -2,8 +2,9 @@
 # Project-local Postgres for development and tests.
 #
 # Runs an isolated cluster in .pgdata/ on port 54329 with trust auth on localhost only,
-# so it never collides with a system Postgres and needs no password. Production data
-# lives in Supabase; this cluster is disposable.
+# so it never collides with a system Postgres and needs no password. The main database
+# can be a Postgres server of your own (`PGHOST`, see backend/.env.example); without one,
+# this cluster holds the only copy of your data, and `reset` deletes it.
 #
 #   scripts/pg-local.sh start     # init on first run, then start
 #   scripts/pg-local.sh stop
