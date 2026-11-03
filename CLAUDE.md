@@ -11,7 +11,7 @@
 - For Qdrant, use the available skills/tools to manage collections, vectors, indexing, querying, and related operations instead of building custom solutions.
 
 - Do not reinvent the wheel. Prefer best-in-class, well-maintained libraries over custom implementations. Ask for permission before adding new dependencies.
-- Use `Vitest` for testing.
+- Use `Vitest` for testing. Exception: the macOS app in `macos/` uses Swift Testing (`swift test`).
 - Do not write slow tests. Keep tests fast, deterministic, and efficient.
 - Keep your code modular and reusable, and avoid duplication wherever possible.
 - If a file grows beyond 400 lines, consider splitting it into smaller, more manageable modules.
