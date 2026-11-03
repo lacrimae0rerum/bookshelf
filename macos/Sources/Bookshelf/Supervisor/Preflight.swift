@@ -89,8 +89,9 @@ enum Preflight {
             let file = paths.pidFile(service)
             guard let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
             defer { try? FileManager.default.removeItem(at: file) }
-            guard let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)), pid > 1,
-                  kill(pid, 0) == 0, executablePath(of: pid) == ours else { continue }
+            // A guard leads its own group; after a reboot the pid may be anyone's, even ours.
+            guard let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)), pid > 1, pid != getpid(),
+                  getpgid(pid) == pid, executablePath(of: pid) == ours else { continue }
             Log.info("the \(service.rawValue) guard of an earlier run is alive (pid \(pid)): stopping it", .supervisor)
             kill(pid, SIGTERM)
             let deadline = ContinuousClock.now + .seconds(7)

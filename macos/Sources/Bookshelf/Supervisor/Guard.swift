@@ -91,7 +91,15 @@ enum GuardLoop {
 
         func stop(_ reason: String) -> Outcome {
             log("stopping: \(reason)")
-            let step = StopSequence.run(child: child, group: group, timings: timings, waitExit: waitChild, log: log)
+            let step = StopSequence.run(
+                child: child, group: group, timings: timings, waitExit: waitChild,
+                killGroup: {  // not killpg: the guard is in the group and must live to log
+                    kill(child, SIGKILL)
+                    GroupCleanup.killOthers(in: group)
+                    _ = ExitStatus.reap(child, block: true)
+                },
+                log: log
+            )
             return .stopped(step, reason: reason)
         }
 

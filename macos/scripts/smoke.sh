@@ -163,7 +163,7 @@ if wait_shown kill "$report"; then
     wait_for 10 nothing_left || true
     done_at=$(elapsed "$t0" "$(now)")
     (( $(size_of "$LOGS/api.log") >= mark )) || mark=0
-    step="$(log_since "$LOGS/api.log" "$mark" | grep '\[guard.*stopped' | sed 's/.*\] //' | tail -1)"
+    step="$(log_since "$LOGS/api.log" "$mark" | grep '\[guard.*stopped' | sed 's/.*\] //' | tail -1 || true)"
     check kill "kill -9: no claude and no guard left" $(nothing_left && echo 1 || echo 0) "all gone after ${done_at} s; API guard: ${step:-?}; left: $(guards) $(fakes)"
   else
     check kill "the question reached the fake claude" 0 "see $WORK/answer-kill.out"

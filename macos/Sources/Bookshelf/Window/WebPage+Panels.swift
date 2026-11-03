@@ -39,8 +39,8 @@ extension WebPage: WKUIDelegate, WKDownloadDelegate {
         panel.allowsMultipleSelection = parameters.allowsMultipleSelection
         panel.canChooseDirectories = parameters.allowsDirectories
         panel.canChooseFiles = true
-        let response = if let window = webView.window { await panel.beginSheetModal(for: window) } else { panel.runModal() }
-        return response == .OK ? panel.urls : nil
+        guard let window = frontWindow() else { return nil }
+        return await panel.beginSheetModal(for: window) == .OK ? panel.urls : nil
     }
 
     // MARK: WKDownloadDelegate (exports, snapshots)
@@ -49,8 +49,7 @@ extension WebPage: WKUIDelegate, WKDownloadDelegate {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = suggestedFilename
         panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
-        let answer = if let window = webView.window { await panel.beginSheetModal(for: window) } else { panel.runModal() }
-        guard answer == .OK, let url = panel.url else { return nil }
+        guard let window = frontWindow(), await panel.beginSheetModal(for: window) == .OK, let url = panel.url else { return nil }
         try? FileManager.default.removeItem(at: url)  // the panel already asked to replace it
         Log.info("download to \(url.path)", .window)
         return url
@@ -60,10 +59,18 @@ extension WebPage: WKUIDelegate, WKDownloadDelegate {
         Log.error("download failed: \(error.localizedDescription)", .window)
     }
 
+    /// Always a sheet on the window, shown first if it was closed or hidden. Never
+    /// `runModal()`: from a WebKit delegate (a main-queue job) it would hold the main queue,
+    /// and with it the guards' exit handlers and the quit, until someone answers.
     private func present(_ alert: NSAlert) async -> NSApplication.ModalResponse {
-        if let window = webView.window, window.isVisible {
-            return await alert.beginSheetModal(for: window)
-        }
-        return alert.runModal()
+        guard let window = frontWindow() else { return .cancel }
+        return await alert.beginSheetModal(for: window)
+    }
+
+    private func frontWindow() -> NSWindow? {
+        guard let window = webView.window else { return nil }
+        NSApp.unhide(nil)
+        window.makeKeyAndOrderFront(nil)
+        return window
     }
 }

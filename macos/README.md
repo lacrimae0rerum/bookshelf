@@ -38,7 +38,9 @@ Bookshelf (app)
   TMPDIR LANG LC_*`) and the app's own variables. `BOOKSHELF_CLAUDE_BIN` is the resolved
   `claude`. Nothing else is inherited (M10).
 - **Quit**: ⌘Q returns `.terminateLater`, asks before quitting while jobs run, stops the web,
-  then the API, within 7 s. The app also quits this way on SIGTERM.
+  then the API, within 7 s; the API always keeps 6.2 s of it for its SIGINT step. The app
+  also quits this way on SIGTERM. A one-shot step still running (`pg-local.sh start`,
+  `astro build`) is not stopped at quit.
 - **Web build**: P1 runs `astro build` only when `frontend/dist/server/entry.mjs` is missing,
   or on *Server → Rebuild Web*. Rebuilds on change come with the fingerprints in P2.
 

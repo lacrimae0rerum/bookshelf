@@ -155,9 +155,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Cancel")
         alert.showsSuppressionButton = true
         alert.suppressionButton?.title = "Don't ask again"
+        NSApp.unhide(nil)
         windowController.showWindow(nil)
-        let response = if let window = windowController.window { await alert.beginSheetModal(for: window) } else { alert.runModal() }
-        let quit = response == .alertFirstButtonReturn
+        guard let window = windowController.window else { return true }
+        let quit = await alert.beginSheetModal(for: window) == .alertFirstButtonReturn  // a sheet, never runModal
         if quit, alert.suppressionButton?.state == .on { preferences.confirmQuitWhileJobsRun = false }
         return quit
     }

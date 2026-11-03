@@ -16,16 +16,22 @@ LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchSe
 
 [[ -d "$APP" ]] || { echo "No build at $APP; run macos/scripts/build-app.sh first." >&2; exit 1; }
 
-# The app only: its guards run the same binary, with --guard arguments.
-running="$(pgrep -fx "$DEST/Contents/MacOS/Bookshelf" || true)"
+# Any running copy (this one, or macos/build's): only one may run, and a second launch
+# would exit at once. The app only: its guards run the same binary with --guard.
+running_apps() {
+  pgrep -f "Bookshelf\.app/Contents/MacOS/Bookshelf" | while read -r pid; do
+    ps -o command= -p "$pid" | grep -q -- "--guard" || echo "$pid"
+  done
+}
+running="$(running_apps)"
 if [[ -n "$running" ]]; then
-  echo "→ quitting the running Bookshelf ($running)"
-  kill -TERM $running
+  echo "→ quitting the running Bookshelf ($(echo $running))"
+  kill -TERM $running  # the app's handler quits as ⌘Q does: services first
   for _ in $(seq 1 150); do
-    pgrep -fx "$DEST/Contents/MacOS/Bookshelf" >/dev/null || break
+    [[ -z "$(running_apps)" ]] && break
     sleep 0.1
   done
-  if pgrep -fx "$DEST/Contents/MacOS/Bookshelf" >/dev/null; then
+  if [[ -n "$(running_apps)" ]]; then
     echo "Bookshelf did not quit within 15 s (a dialog may be waiting); quit it and run this again." >&2
     exit 1
   fi

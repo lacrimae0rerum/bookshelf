@@ -33,11 +33,17 @@ final class GuardedService {
 
         let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .main)
         source.setEventHandler { [weak self] in
-            MainActor.assumeIsolated { self?.reap() }
+            // The exit is reported; wait for the zombie rather than miss it with WNOHANG.
+            MainActor.assumeIsolated { self?.reap(block: true) }
         }
         source.resume()
         self.source = source
-        reap()  // a guard that died before the source was set up
+        reap(block: false)  // a guard that died before the source was set up
+    }
+
+    /// The guard's exit status, or `nil` if it is still running after `timeout`.
+    func waitExit(timeout: Duration) async -> Int32? {
+        await exitStatus.value(timeout: timeout)
     }
 
     /// Asks the guard to stop the service (it runs the M9 sequence). `true` when it ended
@@ -57,8 +63,8 @@ final class GuardedService {
         _ = await exitStatus.value(timeout: .seconds(1))
     }
 
-    private func reap() {
-        guard pid > 0, !exitStatus.isSet, let status = ExitStatus.reap(pid, block: false) else { return }
+    private func reap(block: Bool) {
+        guard pid > 0, !exitStatus.isSet, let status = ExitStatus.reap(pid, block: block) else { return }
         source?.cancel()
         source = nil
         if let pidFile { try? FileManager.default.removeItem(at: pidFile) }

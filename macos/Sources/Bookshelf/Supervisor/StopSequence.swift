@@ -19,15 +19,16 @@ struct StopTimings: Sendable, Equatable {
 
 enum StopSequence {
     /// SIGTERM to `child` only; after `timings.term`, SIGINT to `child`; after
-    /// `timings.interrupt` more, SIGKILL to `group`. `waitExit(timeout)` returns `true` once
-    /// the child has exited and been reaped. The API's `claude` runs live in sessions of
-    /// their own, so the group's SIGKILL never reaches them: the API must end them itself,
-    /// which is why the group is killed last, not first.
+    /// `timings.interrupt` more, `killGroup()` (SIGKILL to the group; the guard spares
+    /// itself). `waitExit(timeout)` returns `true` once the child has exited and been
+    /// reaped. The API's `claude` runs live in sessions of their own, so the group's SIGKILL
+    /// never reaches them: the API must end them itself, which is why the group goes last.
     static func run(
         child: pid_t,
         group: pid_t,
         timings: StopTimings = .standard,
         waitExit: (Duration) -> Bool,
+        killGroup: (() -> Void)? = nil,
         log: (String) -> Void
     ) -> StopStep {
         log("SIGTERM to \(child)")
@@ -37,7 +38,7 @@ enum StopSequence {
         kill(child, SIGINT)
         if waitExit(timings.interrupt) { return .interrupt }
         log("\(child) still running after \(timings.interrupt) more: SIGKILL to group \(group)")
-        killpg(group, SIGKILL)
+        if let killGroup { killGroup() } else { killpg(group, SIGKILL) }
         return .kill
     }
 }

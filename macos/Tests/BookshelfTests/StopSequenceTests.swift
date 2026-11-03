@@ -46,6 +46,21 @@ import Testing
         #expect(!isAlive(pid))
     }
 
+    /// The guard passes its own group-kill, which spares the guard itself.
+    @Test func theLastStepUsesTheCallersGroupKill() throws {
+        let pid = try spawnTrapping(#"trap "" TERM INT"#, then: "while :; do sleep 0.05; done")
+        var calls = 0
+        let step = StopSequence.run(
+            child: pid, group: pid, timings: fast,
+            waitExit: { timeout in usleep(UInt32(timeout.components.attoseconds / 1_000_000_000_000)); return false },
+            killGroup: { calls += 1; kill(pid, SIGKILL) },
+            log: { _ in }
+        )
+        #expect(step == .kill)
+        #expect(calls == 1)
+        #expect(ExitStatus.reap(pid, block: true) == 128 + SIGKILL)
+    }
+
     @Test func aCommandThatIgnoresBothLosesItsWholeGroupToSIGKILL() throws {
         let marker = try temporaryDirectory().appending(path: "grandchild.pid").path
         let pid = try spawnTrapping(#"trap "" TERM INT"#, then: "sleep 30 & echo $! > \(marker); while :; do sleep 0.05; done")

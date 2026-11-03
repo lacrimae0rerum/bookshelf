@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 struct CommandResult: Sendable {
@@ -46,20 +47,48 @@ enum Command {
             try? pipe.fileHandleForWriting.close()
             return CommandResult(status: -1, output: "cannot start \(argv[0]): \(error.localizedDescription)", timedOut: false)
         }
-        let reader = log == nil ? Task.detached { pipe.fileHandleForReading.readDataToEndOfFile() } : nil
+        let output = OutputBuffer()
+        if log == nil {
+            pipe.fileHandleForReading.readabilityHandler = { handle in output.read(handle) }
+        }
 
+        // `Process` starts the command in a process group of its own: signal the group, so a
+        // timeout also ends what the command started (`node` under `pnpm`, a profile's job).
         let pid = process.processIdentifier
+        let signalCommand: (Int32) -> Void = { number in
+            _ = getpgid(pid) == pid ? killpg(pid, number) : kill(pid, number)
+        }
         var status = await exit.value(timeout: timeout)
         let timedOut = status == nil
         if timedOut {
-            kill(pid, SIGTERM)
+            signalCommand(SIGTERM)
             status = await exit.value(timeout: .seconds(1))
             if status == nil {
-                kill(pid, SIGKILL)
+                signalCommand(SIGKILL)
                 status = await exit.value()
             }
         }
-        let output = await reader?.value ?? Data()
-        return CommandResult(status: status ?? -1, output: String(decoding: output, as: UTF8.self), timedOut: timedOut)
+        // Whatever is still holding the pipe (a background job) gets half a second, no more.
+        if log == nil { _ = await output.end.value(timeout: .milliseconds(500)) }
+        return CommandResult(status: status ?? -1, output: output.text, timedOut: timedOut)
+    }
+}
+
+/// A command's captured output, read as it comes so a full pipe never blocks it.
+private final class OutputBuffer: @unchecked Sendable {
+    let end = Eventual<Bool>()
+    private let lock = NSLock()
+    private var data = Data()
+
+    var text: String { lock.withLock { String(decoding: data, as: UTF8.self) } }
+
+    func read(_ handle: FileHandle) {
+        let chunk = handle.availableData
+        if chunk.isEmpty {
+            handle.readabilityHandler = nil
+            end.fulfill(true)
+        } else {
+            lock.withLock { data.append(chunk) }
+        }
     }
 }

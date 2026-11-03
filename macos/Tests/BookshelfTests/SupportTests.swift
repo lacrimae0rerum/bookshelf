@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 @testable import Bookshelf
@@ -49,6 +50,26 @@ struct CommandTests {
         let result = await Command.run(["/bin/sleep", "10"], env: [:], timeout: .milliseconds(100))
         #expect(result.timedOut)
         #expect(!result.succeeded)
+    }
+
+    /// A background job that keeps the pipe open (a login profile's, say) must not hold the caller.
+    @Test func doesNotWaitForWhatTheCommandLeftHoldingThePipe() async {
+        let started = ContinuousClock.now
+        let result = await Command.run(["/bin/sh", "-c", "sleep 5 & echo hi"], env: [:], timeout: .seconds(5))
+        #expect(result.status == 0)
+        #expect(result.output.contains("hi"))
+        #expect(ContinuousClock.now - started < .seconds(2))
+    }
+
+    /// On a timeout the whole group goes: here the background `sleep` the shell started.
+    @Test func aTimeoutEndsTheCommandsGroup() async throws {
+        let marker = try temporaryDirectory().appending(path: "child.pid").path
+        let started = ContinuousClock.now
+        let result = await Command.run(["/bin/sh", "-c", "sleep 30 & echo $! > \(marker); wait"], env: [:], timeout: .milliseconds(300))
+        #expect(result.timedOut)
+        #expect(ContinuousClock.now - started < .seconds(3))
+        let child = pid_t(try String(contentsOfFile: marker, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines))!
+        #expect(eventually { !isAlive(child) })
     }
 
     @Test func reportsACommandThatCannotStart() async {

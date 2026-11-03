@@ -43,7 +43,8 @@ plutil -replace BookshelfCommit -string "$COMMIT" "$PLIST"
 plutil -replace BookshelfRepositoryPath -string "$ROOT" "$PLIST"
 
 IDENTITY="-"
-if security find-identity -v -p codesigning 2>/dev/null | grep -q '"Bookshelf Local"'; then
+# No -v: that lists only trusted identities, and a self-signed one may not be marked trusted.
+if security find-identity -p codesigning 2>/dev/null | grep -q '"Bookshelf Local"'; then
   IDENTITY="Bookshelf Local"
 else
   echo "warning: no \"Bookshelf Local\" identity in the keychain; signing ad-hoc." >&2
