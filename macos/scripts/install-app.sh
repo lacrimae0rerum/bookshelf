@@ -19,7 +19,7 @@ LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchSe
 # Any running copy (this one, or macos/build's): only one may run, and a second launch
 # would exit at once. The app only: its guards run the same binary with --guard.
 running_apps() {
-  pgrep -f "Bookshelf\.app/Contents/MacOS/Bookshelf" | while read -r pid; do
+  { pgrep -f "Bookshelf\.app/Contents/MacOS/Bookshelf" || true; } | while read -r pid; do
     ps -o command= -p "$pid" | grep -q -- "--guard" || echo "$pid"
   done
 }
