@@ -1,6 +1,6 @@
 # Bookshelf for macOS — a native launcher
 
-**Status**: accepted, not built · **Date**: 2026-11-03 · **Extends**: [ARCHITECTURE.md](ARCHITECTURE.md) · **Decision**: [ADR-001](adr/ADR-001-native-macos-launcher-for-bookshelf.md)
+**Status**: accepted; P0 done, P1 next (not built) · **Date**: 2026-11-03 · **Extends**: [ARCHITECTURE.md](ARCHITECTURE.md) · **Decision**: [ADR-001](adr/ADR-001-native-macos-launcher-for-bookshelf.md)
 
 `Bookshelf.app` is a small native app for one Mac. Opening it starts the three local services
 (Postgres, the FastAPI API, the Astro server), shows the web UI in its own window, and stops
@@ -31,7 +31,7 @@ Apple M5 Max, Swift 6.4.2, SDK 27.2). Facts marked **(unverified)** are open; se
 | M6 | **Loopback by IP: `127.0.0.1` everywhere** | `localhost` can resolve to `::1` first while the API binds `127.0.0.1`; one address removes the ambiguity | The app sets `HOST`, `PORT` and `API_INTERNAL_URL` for the web server and loads `http://127.0.0.1:4321` |
 | M7 | **The API and the web run only while the app runs; Postgres stays up** | No background load from the app's services when you are not using it; no LaunchAgents to maintain. Postgres is a small daemon and keeping it saves a step at launch | *Keep the database running after quit* is on by default (§12); switch it off to stop Postgres too |
 | M8 | **Each service in its own process group, watched by a guard** | Force Quit (SIGKILL) skips every cleanup; without a guard the API and its children keep running **(measured)** | The app re-runs itself as `Bookshelf --guard <app-pid> -- <command>`: a kqueue `NOTE_EXIT` watcher that kills the group when the app dies (cleanup in ~280 ms **(measured)**) |
-| M9 | **Stop a service with one SIGTERM to its command, then SIGKILL the group** | SIGTERM to the whole group hangs the API in 3 of 16 starts: `uv` forwards a second SIGTERM that re-enters `lifecycle.chained` while `stopping.set()` holds its lock **(measured)** | The app signals the guard; the guard sends SIGTERM to its direct child (`uv`, `node`) only, waits 5 s, then kills the group. Fix the re-entrancy in `app/core/lifecycle.py` first (§21, P0); the single-signal stop stays as defence in depth |
+| M9 | **Stop a service with SIGTERM to its command, then SIGINT, then SIGKILL the group** | SIGTERM to the whole group used to hang the API (fixed in P0). The API's `claude` runs live in sessions of their own, so a SIGKILL to the group never reaches them: the API must end them itself. Its first SIGTERM stops the jobs' runs at once; a SIGINT after it is uvicorn's forced exit, on which the API also kills the requests' runs (P0) | The app signals the guard; the guard sends SIGTERM to its direct child (`uv`, `node`) only; after 5 s, SIGINT (forced exit); after 1 s more, SIGKILL to the group |
 | M10 | **The environment is built, never inherited** | GUI apps get launchd's `PATH=/usr/bin:/bin:/usr/sbin:/sbin` **(measured)**; an app opened from a terminal inherits that shell's variables, `CLAUDECODE` included **(measured)** | Capture `PATH` from `/bin/zsh -l -c` (29–34 ms **(measured)**), then pass an allowlist of variables (§5) |
 | M11 | **A stable signing identity, not ad-hoc** | An ad-hoc signature's designated requirement is the binary's hash (TN3127), so every rebuild looks like a new app to TCC, notifications and login items | A free self-signed "Bookshelf Local" code-signing certificate in the login keychain. Ad-hoc stays the fallback |
 | M12 | **No sandbox, no hardened runtime, no entitlements** | The app must spawn tools in `~/.local`, `/opt/homebrew` and the repo; the sandbox would pass to the children | Nothing to configure. Only notarization would need the hardened runtime |
@@ -95,11 +95,15 @@ launch ─► resolve repo ─► capture PATH ─► check tools ─► reconci
    again next time." Buttons **Quit** / **Cancel**, with *Don't ask again*. Builds and
    narrations are not counted: they run detached by design and continue after quit.
 3. Stop the web server, then the API (M9): the app sends SIGTERM to the guard; the guard
-   sends SIGTERM to its command only, waits up to 5 s, then SIGKILLs the group. An ordered
-   stop takes ~270 ms **(measured)**.
+   sends SIGTERM to its command only. The API hands the jobs back and kills their runs at
+   once; uvicorn then waits for open requests (a `/search/answer` can take up to 180 s).
+   After 5 s the guard sends SIGINT: uvicorn forces the exit and the API kills every run
+   left, the requests' too. After 1 s more, SIGKILL to the group. With no request open, the
+   stop takes 0.2–0.3 s and leaves no `claude` behind **(measured)**; the SIGINT step
+   follows from the P0 fixes and is checked in P1 **(unverified)**.
 4. Postgres keeps running (the default). With *Keep the database running after quit* off:
    `scripts/pg-local.sh stop` (`pg_ctl -w stop`, fast mode).
-5. `reply(toApplicationShouldTerminate: true)`. Total budget 6 s; after that, kill and quit.
+5. `reply(toApplicationShouldTerminate: true)`. Total budget 7 s; after that, kill and quit.
 
 On logout or shutdown (`NSWorkspace.willPowerOffNotification`) the app skips the dialog.
 The Info.plist must **not** set `NSSupportsSuddenTermination` or
@@ -121,10 +125,10 @@ or the known tool paths is ours and is stopped. Anything else on the port is for
 | Postgres | `scripts/pg-local.sh start` (repo) | the script exits 0 and port 54329 accepts | `scripts/pg-local.sh stop` |
 | Backend deps | `uv sync` (`backend/`) | exit 0 | — |
 | Migrations | `uv run python -m app.db.migrate` (`backend/`) | exit 0 | — |
-| API | `uv run fastapi run app/main.py --host 127.0.0.1 --port 8000` (`backend/`) | `GET /health/ready` is 200 | guard: SIGTERM to the command → 5 s → SIGKILL group |
+| API | `uv run fastapi run app/main.py --host 127.0.0.1 --port 8000` (`backend/`) | `GET /health/ready` is 200 | guard: SIGTERM to the command → 5 s → SIGINT → 1 s → SIGKILL group |
 | Frontend deps | `pnpm install --frozen-lockfile` (`frontend/`) | exit 0 | — |
 | Web build | `pnpm exec astro build` (`frontend/`) | exit 0 | — |
-| Web | `node --env-file=.env dist/server/entry.mjs` (`frontend/`), with `HOST=127.0.0.1 PORT=4321 API_INTERNAL_URL=http://127.0.0.1:8000/api/v1` | `GET /` is 200 | guard: SIGTERM to the command → 5 s → SIGKILL group |
+| Web | `node --env-file=.env dist/server/entry.mjs` (`frontend/`), with `HOST=127.0.0.1 PORT=4321 API_INTERNAL_URL=http://127.0.0.1:8000/api/v1` | `GET /` is 200 | guard: SIGTERM to the command → 5 s → SIGINT → 1 s → SIGKILL group |
 
 - `astro build` skips the 19 s `astro check` that `pnpm build` runs **(measured)**; type
   checking stays in the developer workflow, not in a launch.
@@ -513,7 +517,7 @@ macos/
 
 | Phase | Delivers | Done when |
 |---|---|---|
-| **P0** prerequisites | Fix the SIGTERM re-entrancy hang in `app/core/lifecycle.py` (`/alfred-dev:fix`); correct the stale "Production data lives in Supabase" comment in `scripts/pg-local.sh` | 16 of 16 group SIGTERMs stop the API with runners on |
+| **P0** prerequisites — **done** (2026-11-03) | The API's shutdown, made safe for a supervisor: the signal handler never blocks (`b28ae80`); the first signal stops the jobs' runs and a forced exit the requests' too (`d782745`); job runs that start after that are refused (`d39b8cc`). Also the `scripts/pg-local.sh` comment (`224f831`) and a flaky catalogue test (`e9af837`) | Met: 0 of 32 group SIGTERMs hang (6 of 16 before); one SIGTERM stops the API in 0.2 s with no `claude` left (5 s, SIGKILL and 2 orphans before) |
 | **P1** core | Supervisor, guards, environment, loading and error views, window, menus, quit flow, logs, build/sign/install scripts, a placeholder icon | Opened from Finder: ready in ≤ 5 s warm; ⌘Q leaves nothing on 8000/4321; Force Quit leaves nothing on 8000/4321 within 1 s |
 | **P2** integration | Menu bar icon, Dock menu and badge, intake (Dock, Finder, ⌘O, window drop), notifications, Settings, fingerprints and rebuilds, restarts, sleep/wake | A PDF dropped on the Dock icon appears on the shelf; a failed job notifies; a frontend edit triggers a rebuild at the next launch |
 | **P3** polish | Icon Composer icon, URL scheme, AppleScript, open at login, find/print checks, full-bleed title bar, optional development mode | `osascript … get status` answers; the icon renders in light, dark and tinted |
@@ -534,6 +538,11 @@ macos/
 - How long logout waits for `.terminateLater`.
 - The Dock icon cache after replacing the app in `~/Applications`.
 - `books.vertical.fill` and `pause.circle` as template images.
+- The stop's SIGINT step (§3) with a `/search/answer` open: the answer's `claude` must be
+  gone before the SIGKILL.
+- Known, accepted gaps from P0: a job run can escape for a few milliseconds if the API
+  dies between its slot check and its registration; build agents and narrations run
+  detached by design and survive the API.
 
 ---
 
@@ -543,5 +552,5 @@ macos/
 2. **Signing**: a self-signed "Bookshelf Local" certificate; ad-hoc only as the fallback.
 3. **Swift tests**: Swift Testing in `macos/`, as an exception to the Vitest rule (CLAUDE.md).
 4. **Database at quit**: it keeps running by default.
-5. **Order**: the P0 backend fix comes before P1. The API hang on a group SIGTERM also
-   matters outside the app, for any supervisor that signals the whole group.
+5. **Order**: the P0 backend fixes come before P1 (done). The API hang on a group SIGTERM
+   also mattered outside the app, for any supervisor that signals the whole group.

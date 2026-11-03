@@ -71,9 +71,10 @@ backend fix (P0) comes before the first build phase.
 ## Consecuencias
 
 - The app is tied to this Mac and this repo; it is not distributable as is.
-- A backend bug surfaced by the spike must be fixed first: a SIGTERM sent to the API's whole
-  process group hangs it in 3 of 16 starts (re-entrant signal handler in
-  `app/core/lifecycle.py`).
+- The API's shutdown had to be made safe for a supervisor first (P0, done 2026-11-03): a
+  SIGTERM to its process group no longer hangs it, and its `claude` runs, which live in
+  sessions of their own, are ended by the API itself (`b28ae80`, `d782745`, `d39b8cc`).
+  The app stops it with SIGTERM, then SIGINT, then SIGKILL (`docs/MACOS_APP.md`, M9).
 - The app's tests are Swift Testing (`swift test`); CLAUDE.md now carries that exception
   for `macos/`.
 - A self-signed certificate must be created once in the login keychain.
