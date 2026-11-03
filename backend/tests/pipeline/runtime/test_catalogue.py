@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Any
 
+import pytest
 from sqlmodel import Session
 
 from app.models import Artifact, Document
@@ -91,6 +92,27 @@ def test_shelf_themes_prefer_approved_cards_and_merge_spellings(session: Session
         {"name": "Career", "documents": 1},
         {"name": "machine Learning", "documents": 1},
     ]
+
+
+def test_a_tie_between_spellings_never_depends_on_the_order_the_cards_come_back(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+):
+    one, two = (add_document(session, slug=f"tie-{n}") for n in range(2))
+    card(session, one, "Machine learning")
+    card(session, two, "machine Learning")
+    real = catalogue.preferred_cards
+    names = set()
+    # Postgres returns rows that tie on the sort key in no fixed order: try both.
+    for flip in (False, True):
+
+        def ordered(session: Session, ids: Any = None, flip: bool = flip) -> dict[Any, Artifact]:
+            found = list(real(session, ids).items())
+            return dict(reversed(found) if flip else found)
+
+        monkeypatch.setattr(catalogue, "preferred_cards", ordered)
+        names.add(catalogue.shelf_themes(session)[0]["name"])
+
+    assert names == {"Machine learning"}  # a tie goes to the first in code-point order
 
 
 def test_a_card_shows_in_the_shelfs_spelling_and_says_when_it_is_a_draft(session: Session):

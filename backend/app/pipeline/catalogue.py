@@ -89,7 +89,9 @@ def cards(session: Session, ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, dict[st
 
 def shelf_themes(session: Session, *, exclude: uuid.UUID | None = None) -> list[dict[str, Any]]:
     """`[{name, documents}]`: the themes the shelf's cards name, most used first, then by
-    name. Near-duplicates by case or spacing count as one, spelled as most cards spell it."""
+    name. Near-duplicates by case or spacing count as one, spelled as most cards spell it;
+    a tie goes to the spelling first in code-point order (capitals first), never to the
+    order the database happens to return the cards in."""
     counts: Counter[str] = Counter()
     spellings: dict[str, Counter[str]] = {}
     for doc_id, artifact in preferred_cards(session).items():
@@ -101,4 +103,10 @@ def shelf_themes(session: Session, *, exclude: uuid.UUID | None = None) -> list[
         counts[key] += 1
         spellings.setdefault(key, Counter())[name] += 1
     ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
-    return [{"name": spellings[key].most_common(1)[0][0], "documents": n} for key, n in ranked]
+    return [{"name": _spelling(spellings[key]), "documents": n} for key, n in ranked]
+
+
+def _spelling(seen: Counter[str]) -> str:
+    """The most frequent spelling; on a tie the first in code-point order. (`most_common`
+    breaks ties by insertion order, which is the database's row order here.)"""
+    return min(seen.items(), key=lambda kv: (-kv[1], kv[0]))[0]
