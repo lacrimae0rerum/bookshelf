@@ -27,3 +27,8 @@ func eventually(timeout: Duration = .seconds(2), _ condition: () -> Bool) -> Boo
     }
     return condition()
 }
+
+/// A job queue as `GET /jobs/queue` reads it.
+func jobQueue(running: Int = 0, queued: Int = 0, paused: Bool = false) -> QueueSummary {
+    QueueSummary(queued: queued, running: running, paused: paused, pausedReason: nil)
+}

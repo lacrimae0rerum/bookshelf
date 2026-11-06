@@ -107,6 +107,22 @@ struct MainMenuTests {
         }
     }
 
+    /// A paused queue's reason can be a long CLI error: the status lines (Server menu and the
+    /// menu bar icon's) stop at 80 characters, so the menu stays narrow; the web shows it all.
+    @Test func aLongStatusLineIsCutTo80Characters() {
+        let line = MainMenu.statusLine(.jobs, "paused: " + String(repeating: "x", count: 500))
+        #expect(line.count == 80)
+        #expect(line.hasPrefix("Jobs: paused: xxx"))
+        #expect(line.hasSuffix("x…"))
+    }
+
+    @Test func aStatusLineOf80CharactersOrLessIsKept() {
+        #expect(MainMenu.statusLine(.jobs, "2 running · 5 queued") == "Jobs: 2 running · 5 queued")
+        #expect(MainMenu.statusLine(.database, "running") == "Database: running")
+        let full = String(repeating: "y", count: 80 - "Jobs: ".count)
+        #expect(MainMenu.statusLine(.jobs, full) == "Jobs: " + full)
+    }
+
     @Test func serverMenuHasItsStatusLinesAndActions() {
         let server = bar.item(withTitle: "Server")?.submenu
         for tag in MainMenu.StatusTag.allCases {

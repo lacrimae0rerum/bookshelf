@@ -15,9 +15,10 @@ extension AppDelegate: IntakePresenter {
         intake.receive(files)
     }
 
-    /// File → Add to Library… (⌘O): one or more files of the types intake takes.
+    /// File → Add to Library… (⌘O), and the menu bar icon's menu: one or more files of the
+    /// types intake takes. Activates the app, or the panel would open behind the active one.
     @objc func addToLibrary(_ sender: Any?) {
-        guard let window = frontMainWindow() else { return }
+        guard let window = frontMainWindow(activating: true) else { return }
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
@@ -85,10 +86,12 @@ extension AppDelegate: IntakePresenter {
         }
     }
 
-    /// The main window, unhidden and in front: a sheet needs it on screen.
+    /// The main window, unhidden and in front: a sheet needs it on screen. `activating` also
+    /// brings the app in front of the active one; only for what the person just chose.
     @discardableResult
-    private func frontMainWindow() -> NSWindow? {
+    func frontMainWindow(activating: Bool = false) -> NSWindow? {
         NSApp.unhide(nil)
+        if activating { NSApp.activate() }
         windowController.showWindow(nil)
         return windowController.window
     }

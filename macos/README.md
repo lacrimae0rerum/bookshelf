@@ -4,7 +4,7 @@ A native macOS launcher for this repo: it starts Postgres, the API and the compi
 shows the web in its own window, and stops the services when you quit. Design and
 decisions: [docs/MACOS_APP.md](../docs/MACOS_APP.md) and
 [ADR-001](../docs/adr/ADR-001-native-macos-launcher-for-bookshelf.md). This is phase P1,
-plus adding files (§13), brought forward from P2.
+plus adding files (§13) and the menu bar icon (§10), both brought forward from P2.
 
 ## Build, install, test
 
@@ -71,6 +71,19 @@ Every file dragged onto the window from another app goes to intake, so dropping 
 on the web's restore field no longer works: use that field's button, which opens the panel.
 Drags that start in the page stay the page's.
 
+## Menu bar icon
+
+The icon shows the state by its shape (§10): an hourglass while the services start or stop,
+empty books when ready, filled books while jobs run, a pause sign when the job queue is
+paused, a warning triangle when a service failed. Its tooltip says the same in words. Click
+it for the status lines (Database, API, Web, Jobs), *Open Bookshelf*, *Add to Library…*,
+*Pause / Resume Job Queue*, *Restart Services* and *Quit Bookshelf*. ⌘-drag moves it, and
+macOS keeps its place; there is no setting to hide it until Settings (P2). While the services
+are ready, the app reads the job queue every 5 s while jobs run or wait, and every 30 s when
+the queue is idle or paused; each read adds a line to `api.log`. A status line longer than 80
+characters (a paused queue's reason, say) is cut with "…", here and in the Server menu; the
+web shows it whole.
+
 ## Files
 
 | Path | Holds |
@@ -88,6 +101,6 @@ Settings have no window until P2. Keys in the `io.github.lacrimae0rerum.bookshel
 `Sources/Bookshelf/`: `App/` (entry point, delegate, menus, intake's panels and alerts, smoke
 mode), `Window/` (window, web view and its file drop, loading and error views, navigation
 policy), `Supervisor/` (supervisor, guard, spawn, kqueue, stop sequence, ports, readiness),
-`Integration/` (intake: file types, inbox copy, API calls, what to show), `Environment/`
-(login PATH, allowlist, tools), `Build/` (state file), `Support/` (paths, preferences, logs,
-one-shot commands).
+`Integration/` (intake: file types, inbox copy, API calls, what to show; the menu bar icon
+and its job-queue poll), `Environment/` (login PATH, allowlist, tools), `Build/` (state file),
+`Support/` (paths, preferences, logs, one-shot commands).

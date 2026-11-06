@@ -9,8 +9,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) lazy var supervisor = Supervisor(paths: paths, preferences: preferences)
     private(set) var page: WebPage!
     private(set) var windowController: MainWindowController!
-    /// The job queue as last read (Server menu, Pause / Resume).
-    var lastQueue: QueueSummary?
+    /// The job queue as last read (Server menu, Pause / Resume, the menu bar icon's poll).
+    var lastQueue: QueueSummary? {
+        didSet { refreshStatusIcon() }
+    }
+    /// The menu bar icon (§10), from launch on. Settable so tests can put in a recorder.
+    var statusItem: (any StatusIconDisplay)?
+    /// Reads the job queue for the icon while the services are ready. Settable so tests can
+    /// put in one with a fake queue.
+    lazy var queuePoll: QueuePoll = makeQueuePoll(phase: { [unowned self] in supervisor.phase })
+    /// `PATCH /jobs/queue` (Pause / Resume Job Queue). Settable so tests can put in a stub.
+    var setJobQueuePaused: @MainActor (Bool) async -> QueueSummary? = JobsAPI.setPaused
     /// Files and web articles into the library (§13); files wait for `.ready`. Settable so
     /// tests can put in one with a stub API.
     lazy var intake: Intake = {
@@ -48,6 +57,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.servicesMenu = submenu("Bookshelf")?.item(withTitle: "Services")?.submenu
         NSApp.windowsMenu = submenu("Window")
         NSApp.helpMenu = submenu("Help")
+        statusItem = StatusItem(menu: StatusItem.menu(for: self))
+        refreshStatusIcon()
 
         page = WebPage(preferences: preferences)
         windowController = MainWindowController(page: page)
@@ -111,6 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @discardableResult
     func supervisorChanged() -> Task<Void, Never>? {
         syncLoadingView()
+        syncStatusItem()
         return intake.resumeIfReady()
     }
 
@@ -174,9 +186,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Cancel")
         alert.showsSuppressionButton = true
         alert.suppressionButton?.title = "Don't ask again"
-        NSApp.unhide(nil)
-        windowController.showWindow(nil)
-        guard let window = windowController.window else { return true }
+        // In front of every app: Quit from the menu bar icon comes while another one is active,
+        // and a sheet behind it would hold the quit unseen.
+        guard let window = frontMainWindow(activating: true) else { return true }
         let quit = await alert.beginSheetModal(for: window) == .alertFirstButtonReturn  // a sheet, never runModal
         if quit, alert.suppressionButton?.state == .on { preferences.confirmQuitWhileJobsRun = false }
         return quit
