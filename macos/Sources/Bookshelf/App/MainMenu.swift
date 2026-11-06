@@ -10,10 +10,22 @@ enum MainMenu {
         ("Pills", "4", "/pills"), ("Review", "5", "/review"), ("Pipeline", "6", "/pipeline"),
     ]
 
-    /// Tags of the Server menu's status lines.
+    /// Tags of the status lines (the Server menu, the menu bar icon's menu).
     enum StatusTag: Int, CaseIterable {
         case database = 100, api, web, jobs
+
+        var name: String {
+            switch self {
+            case .database: "Database"
+            case .api: "API"
+            case .web: "Web"
+            case .jobs: "Jobs"
+            }
+        }
     }
+
+    /// The longest status line: a paused queue's reason can be a long CLI error.
+    static let statusLineLimit = 80
 
     static func build(serverMenuDelegate: NSMenuDelegate?) -> NSMenu {
         let bar = NSMenu()
@@ -125,11 +137,7 @@ enum MainMenu {
     static func serverMenu(delegate: NSMenuDelegate?) -> NSMenu {
         let menu = NSMenu()
         menu.delegate = delegate
-        for tag in StatusTag.allCases {
-            let line = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-            line.tag = tag.rawValue
-            menu.addItem(line)
-        }
+        addStatusLines(to: menu)
         menu.addItem(.separator())
         menu.addItem(item("Restart Services", #selector(AppDelegate.restartServices(_:)), "r", [.command, .option]))
         menu.addItem(item("Restart API", #selector(AppDelegate.restartAPI(_:))))
@@ -141,6 +149,24 @@ enum MainMenu {
         menu.addItem(item("Open API Docs", #selector(AppDelegate.openAPIDocs(_:))))
         menu.addItem(item("Show Logs", #selector(AppDelegate.showLogs(_:))))
         return menu
+    }
+
+    /// Database, API, Web, Jobs: untitled lines that the menu's delegate fills when it opens
+    /// (`AppDelegate.menuNeedsUpdate`). The Server menu and the menu bar icon's menu.
+    static func addStatusLines(to menu: NSMenu) {
+        for tag in StatusTag.allCases {
+            let line = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+            line.tag = tag.rawValue
+            menu.addItem(line)
+        }
+    }
+
+    /// "Jobs: 2 running · 5 queued", cut to `statusLineLimit` characters with an ellipsis;
+    /// the web shows the whole text.
+    static func statusLine(_ tag: StatusTag, _ value: String) -> String {
+        let line = "\(tag.name): \(value)"
+        guard line.count > statusLineLimit else { return line }
+        return line.prefix(statusLineLimit - 1) + "…"
     }
 
     static func windowMenu() -> NSMenu {

@@ -277,8 +277,8 @@ Shortcuts the web already uses stay with the web: **⌘K** (search) and **⌘↩
 | Queue paused | `pause.circle` |
 | Error | `exclamationmark.triangle.fill` |
 
-  (`books.vertical`, `hourglass` and `exclamationmark.triangle.fill` checked in the SDK as
-  template images **(measured)**; the other two to check.)
+  (All five checked in the SDK as template images **(measured)**; `books.vertical.fill` and
+  `pause.circle` by the unit tests, 2026-11-06.)
 - **Tooltip** and `accessibilityDescription` say the state in words: "Bookshelf — ready, 2
   jobs running".
 - **Click** opens a menu, not a popover: status lines (Database ✓, API ✓, Web ✓, Jobs: 2
@@ -520,7 +520,7 @@ macos/
 |---|---|---|
 | **P0** prerequisites — **done** (2026-11-03) | The API's shutdown, made safe for a supervisor: the signal handler never blocks (`b28ae80`); the first signal stops the jobs' runs and a forced exit the requests' too (`d782745`); job runs that start after that are refused (`d39b8cc`). Also the `scripts/pg-local.sh` comment (`224f831`) and a flaky catalogue test (`e9af837`) | Met: 0 of 32 group SIGTERMs hang (6 of 16 before); one SIGTERM stops the API in 0.2 s with no `claude` left (5 s, SIGKILL and 2 orphans before) |
 | **P1** core — **done** (2026-11-03; UAT passed, Fer, 2026-11-04, installed in `~/Applications`) | Supervisor, guards, environment, loading and error views, window, menus, quit flow, logs, build/sign/install scripts, a placeholder icon. Signed with "Bookshelf Local" (`make-signing-identity.sh`, made 2026-11-03): the designated requirement is the certificate leaf. The web is built only when `dist/` is missing or on *Rebuild Web* (fingerprints: P2) | Met (`macos/scripts/smoke.sh`, `env -i … open -n`, fake `claude`): page shown 1.5–1.7 s after `open` warm; ⌘Q leaves nothing on 8000/4321; SIGKILL to the app frees them in 0.09–0.17 s and, with an answer open, its `claude` ends at the SIGINT step (5.3 s), no orphans. Known gap: a `pg-local.sh start` or `astro build` still running at quit is not stopped |
-| **P2** integration | Menu bar icon, Dock menu and badge, ~~intake (Dock, Finder, ⌘O, window drop)~~ (brought forward, below), notifications, Settings, fingerprints and rebuilds, restarts, sleep/wake | A PDF dropped on the Dock icon appears on the shelf; a failed job notifies; a frontend edit triggers a rebuild at the next launch |
+| **P2** integration | ~~Menu bar icon~~ (brought forward, below; its setting stays in P2), Dock menu and badge, ~~intake (Dock, Finder, ⌘O, window drop)~~ (brought forward, below), notifications, Settings, fingerprints and rebuilds, restarts, sleep/wake | A PDF dropped on the Dock icon appears on the shelf; a failed job notifies; a frontend edit triggers a rebuild at the next launch |
 | **P3** polish | Icon Composer icon, URL scheme, AppleScript, open at login, find/print checks, full-bleed title bar, optional development mode | `osascript … get status` answers; the icon renders in light, dark and tinted |
 
 **Intake brought forward from P2** (2026-11-04, decision of Fer): the web cannot upload
@@ -533,6 +533,21 @@ so is the copy when the API does not answer (or the proxy answers `502 upstream_
 only drags from other apps go to intake, and every file drag from one does, so the web's
 snapshot field takes its file through its button; `bookshelf://add` stays with the URL scheme
 (P3). The window drop and the Dock are checked by hand.
+
+**Menu bar icon brought forward from P2** (2026-11-06, decision of Fer): §10's icon and its
+menu, without *Settings…*. The menu has the four status lines, *Open Bookshelf*, *Add to
+Library…*, *Pause / Resume Job Queue*, *Restart Services* and *Quit Bookshelf*. The app is
+often inactive when the icon is clicked, so the items target the app delegate, and *Open
+Bookshelf* and *Add to Library…* bring the app to the front. ⌘-drag cannot remove the icon.
+Settings, the *Show in menu bar* setting (M16) and the menu-bar-only mode stay in P2. The
+hourglass also shows before the first start. The icon reads `/jobs/queue` as soon as the
+services are ready, then every 5 s while jobs run or wait in a queue that is not paused, and
+every 30 s otherwise: each read is a line in `api.log`. `/jobs/stream` stays in P2. The
+status lines (here and in the Server menu) stop at 80 characters, so a long pause reason
+does not widen the menu. To check by hand (UAT): how the icon looks (light, dark, tinted);
+*Open Bookshelf*, *Add to Library…* and the confirmation of *Quit Bookshelf* while jobs run
+come in front of the active app; ⌘-drag does not remove the icon; its place stays after a
+relaunch.
 
 ---
 
@@ -549,7 +564,8 @@ snapshot field takes its file through its button; `bookshelf://add` stays with t
   good `dist/`.
 - How long logout waits for `.terminateLater`.
 - The Dock icon cache after replacing the app in `~/Applications`.
-- `books.vertical.fill` and `pause.circle` as template images.
+- ~~`books.vertical.fill` and `pause.circle` as template images~~: checked by the unit tests
+  (2026-11-06).
 - ~~The stop's SIGINT step (§3) with a `/search/answer` open~~: checked in P1; the
   answer's `claude` is gone at the SIGINT step, before the SIGKILL.
 - Known, accepted gaps from P0: a job run can escape for a few milliseconds if the API

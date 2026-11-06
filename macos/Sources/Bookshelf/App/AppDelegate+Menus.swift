@@ -59,10 +59,13 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
         }
     }
 
+    /// Does what the item's title said (`representedObject`, set with it in
+    /// `validateMenuItem`): a newer reading of the queue may land between the menu opening and
+    /// the click. With no item, the last reading decides.
     @objc func toggleJobQueue(_ sender: Any?) {
-        let pause = !(lastQueue?.paused ?? false)
+        let pause = (sender as? NSMenuItem)?.representedObject as? Bool ?? !(lastQueue?.paused ?? false)
         Task {
-            if let queue = await JobsAPI.setPaused(pause) {
+            if let queue = await setJobQueuePaused(pause) {
                 lastQueue = queue
                 Log.info("job queue \(queue.paused ? "paused" : "resumed")")
             } else {
@@ -108,7 +111,9 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
         case #selector(addToLibrary(_:)), #selector(addWebArticle(_:)):
             return Self.canAddToLibrary(phase: supervisor.phase, sheetOpen: windowController?.window?.attachedSheet != nil)
         case #selector(toggleJobQueue(_:)):
-            item.title = lastQueue?.paused == true ? "Resume Job Queue" : "Pause Job Queue"
+            let paused = lastQueue?.paused == true
+            item.title = paused ? "Resume Job Queue" : "Pause Job Queue"
+            item.representedObject = !paused  // what a click asks for: what the title says
             return ready
         case #selector(revealLibrary(_:)), #selector(openReadme(_:)):
             return supervisor.context != nil
@@ -134,15 +139,16 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
         }
     }
 
+    /// The Server menu's and the menu bar icon's: both carry the same tagged lines.
     private func updateStatusLines(in menu: NSMenu) {
-        let lines: [(MainMenu.StatusTag, String)] = [
-            (.database, "Database: \(describe(.database))"),
-            (.api, "API: \(describe(.api))"),
-            (.web, "Web: \(describe(.web))"),
-            (.jobs, "Jobs: \(supervisor.phase == .ready ? lastQueue?.summary ?? "—" : "—")"),
+        let values: [(MainMenu.StatusTag, String)] = [
+            (.database, describe(.database)),
+            (.api, describe(.api)),
+            (.web, describe(.web)),
+            (.jobs, supervisor.phase == .ready ? lastQueue?.summary ?? "—" : "—"),
         ]
-        for (tag, title) in lines {
-            menu.item(withTag: tag.rawValue)?.title = title
+        for (tag, value) in values {
+            menu.item(withTag: tag.rawValue)?.title = MainMenu.statusLine(tag, value)
         }
     }
 
