@@ -27,6 +27,8 @@ struct MainMenuTests {
             ("q", .command, #selector(NSApplication.terminate(_:))),
             ("h", .command, #selector(NSApplication.hide(_:))),
             ("h", [.command, .option], #selector(NSApplication.hideOtherApplications(_:))),
+            ("o", .command, #selector(AppDelegate.addToLibrary(_:))),
+            ("o", [.command, .shift], #selector(AppDelegate.addWebArticle(_:))),
             ("w", .command, #selector(NSWindow.performClose(_:))),
             ("p", .command, #selector(AppDelegate.printPage(_:))),
             ("z", .command, Selector(("undo:"))),
@@ -80,9 +82,28 @@ struct MainMenuTests {
         #expect(Set(shortcuts).count == shortcuts.count)
     }
 
-    @Test func p2FeaturesShowDisabled() {
-        for title in ["Settings…", "Add to Library…", "Add Web Article…"] {
-            #expect(items.first { $0.title == title }?.action == nil, "\(title)")
+    /// Settings comes in P2: present, with no action, so it shows disabled.
+    @Test func settingsShowsDisabled() {
+        #expect(items.first { $0.title == "Settings…" }?.action == nil)
+    }
+
+    /// Intake posts to the API, so its items wait for the services (§13).
+    @Test func addingToTheLibraryWaitsForTheServices() throws {
+        let delegate = AppDelegate(smoke: SmokeReport(arguments: [], launched: .now))
+        for title in ["Add to Library…", "Add Web Article…"] {
+            let entry = try #require(items.first { $0.title == title })
+            #expect(entry.action != nil, "\(title)")
+            #expect(!delegate.validateMenuItem(entry), "\(title)")
+        }
+    }
+
+    /// ⌘O and ⇧⌘O: only with the services ready and no sheet on the window; a second panel
+    /// would queue behind the one that is open.
+    @Test func addingIsOfferedOnlyWhenReadyAndNoSheetIsOpen() {
+        #expect(AppDelegate.canAddToLibrary(phase: .ready, sheetOpen: false))
+        #expect(!AppDelegate.canAddToLibrary(phase: .ready, sheetOpen: true))
+        for phase in [Supervisor.Phase.idle, .starting, .stopping, .failed] {
+            #expect(!AppDelegate.canAddToLibrary(phase: phase, sheetOpen: false), "\(phase)")
         }
     }
 

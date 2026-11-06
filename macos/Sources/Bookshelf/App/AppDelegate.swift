@@ -11,6 +11,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var windowController: MainWindowController!
     /// The job queue as last read (Server menu, Pause / Resume).
     var lastQueue: QueueSummary?
+    /// Files and web articles into the library (§13); files wait for `.ready`. Settable so
+    /// tests can put in one with a stub API.
+    lazy var intake: Intake = {
+        let intake = Intake(send: IntakeAPI.send, readyLibrary: { [unowned self] in
+            supervisor.phase == .ready ? supervisor.context?.repo.library : nil
+        })
+        intake.presenter = self
+        return intake
+    }()
     private var quitting = false
     private var poweringOff = false
     private var signalSource: DispatchSourceSignal?
@@ -81,8 +90,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func wireCallbacks() {
-        supervisor.onChange = { [weak self] in self?.syncLoadingView() }
+        supervisor.onChange = { [weak self] in self?.supervisorChanged() }
         supervisor.onServiceDied = { [weak self] failure in self?.show(failure) }
+        page.webView.onFileDrop = { [weak self] files in self?.intake.receive(files) }
         page.onFirstPaint = { [weak self] in self?.pageShown() }
         page.onLoadFailure = { [weak self] message in
             guard let self else { return }
@@ -96,7 +106,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Also lets the files that waited go in once the services are ready (at launch, or
+    /// after a restart): the batch's task, or `nil` when nothing starts.
+    @discardableResult
+    func supervisorChanged() -> Task<Void, Never>? {
+        syncLoadingView()
+        return intake.resumeIfReady()
+    }
+
     func syncLoadingView() {
+        guard let windowController else { return }  // the supervisor can change before the window
         for step in Supervisor.Step.allCases {
             windowController.loadingView.update(step, supervisor.state(of: step))
         }

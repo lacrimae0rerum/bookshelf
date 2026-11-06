@@ -1,7 +1,7 @@
 import AppKit
 
-/// The menu bar of §8, built in code. ⌘K and ⌘↩ stay with the web. Items whose feature
-/// comes in P2 (Settings, adding files) are present but have no action, so they show disabled.
+/// The menu bar of §8, built in code. ⌘K and ⌘↩ stay with the web. Settings comes in P2:
+/// it is present but has no action, so it shows disabled.
 @MainActor
 enum MainMenu {
     /// Go menu: title, key, path on the web origin.
@@ -49,8 +49,8 @@ enum MainMenu {
 
     static func fileMenu() -> NSMenu {
         let menu = NSMenu()
-        menu.addItem(item("Add to Library…", nil, "o"))
-        menu.addItem(item("Add Web Article…", nil, "o", [.command, .shift]))
+        menu.addItem(item("Add to Library…", #selector(AppDelegate.addToLibrary(_:)), "o"))
+        menu.addItem(item("Add Web Article…", #selector(AppDelegate.addWebArticle(_:)), "o", [.command, .shift]))
         menu.addItem(.separator())
         menu.addItem(item("Close Window", #selector(NSWindow.performClose(_:)), "w"))
         menu.addItem(.separator())

@@ -3,7 +3,8 @@
 A native macOS launcher for this repo: it starts Postgres, the API and the compiled web,
 shows the web in its own window, and stops the services when you quit. Design and
 decisions: [docs/MACOS_APP.md](../docs/MACOS_APP.md) and
-[ADR-001](../docs/adr/ADR-001-native-macos-launcher-for-bookshelf.md). This is phase P1.
+[ADR-001](../docs/adr/ADR-001-native-macos-launcher-for-bookshelf.md). This is phase P1,
+plus adding files (§13), brought forward from P2.
 
 ## Build, install, test
 
@@ -46,6 +47,30 @@ Bookshelf (app)
 - **Web build**: P1 runs `astro build` only when `frontend/dist/server/entry.mjs` is missing,
   or on *Server → Rebuild Web*. Rebuilds on change come with the fingerprints in P2.
 
+## Adding files
+
+All entry points take the same path (docs/MACOS_APP.md §13):
+
+- Drop PDF, EPUB, HTML or Markdown files on the Dock icon, or use *Open With → Bookshelf* in Finder.
+- *File → Add to Library…* (⌘O) for one or more files, or drop them onto the window.
+- *File → Add Web Article…* (⇧⌘O) for an `http`/`https` address; the API fetches the page.
+
+The app copies each file (it never moves it, and off the main thread) to
+`library/inbox/<yyyy-mm>/`, with ` (2)`, ` (3)`… before the extension on a name clash, then
+sends `POST /api/documents {"path": "inbox/…"}` through the web's proxy. One new document
+opens its page; several open the library. Content already on the shelf (`409`): the app says
+so, offers to open it and deletes the copy; any other error also deletes it. With no answer
+at all (or the proxy's `502 upstream_unavailable`), the copy is kept (the API may have taken
+it) and the alert says where; *Add a book* lists it if it is not on the shelf. Other file
+types get a short alert and are not copied. Files that arrive while the services are not
+ready wait, uncopied, and go in once they are. Web addresses must be `http`/`https`, without
+credentials. Each file gets a line in `app.log` (`[intake]`) with its name and its copy's
+path in `library/`; a web article, with its scheme and host only.
+
+Every file dragged onto the window from another app goes to intake, so dropping a snapshot
+on the web's restore field no longer works: use that field's button, which opens the panel.
+Drags that start in the page stay the page's.
+
 ## Files
 
 | Path | Holds |
@@ -60,7 +85,9 @@ Settings have no window until P2. Keys in the `io.github.lacrimae0rerum.bookshel
 
 ## Code
 
-`Sources/Bookshelf/`: `App/` (entry point, delegate, menus, smoke mode), `Window/` (window,
-web view, loading and error views, navigation policy), `Supervisor/` (supervisor, guard,
-spawn, kqueue, stop sequence, ports, readiness), `Environment/` (login PATH, allowlist,
-tools), `Build/` (state file), `Support/` (paths, preferences, logs, one-shot commands).
+`Sources/Bookshelf/`: `App/` (entry point, delegate, menus, intake's panels and alerts, smoke
+mode), `Window/` (window, web view and its file drop, loading and error views, navigation
+policy), `Supervisor/` (supervisor, guard, spawn, kqueue, stop sequence, ports, readiness),
+`Integration/` (intake: file types, inbox copy, API calls, what to show), `Environment/`
+(login PATH, allowlist, tools), `Build/` (state file), `Support/` (paths, preferences, logs,
+one-shot commands).

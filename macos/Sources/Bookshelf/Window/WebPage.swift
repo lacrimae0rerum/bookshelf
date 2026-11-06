@@ -2,12 +2,12 @@ import AppKit
 import WebKit
 
 /// The window's one `WKWebView` (M3, §7) and its navigation delegate. UI panels and
-/// downloads are in `WebPage+Panels.swift`.
+/// downloads are in `WebPage+Panels.swift`; file drops, in `FileDropWebView`.
 @MainActor
 final class WebPage: NSObject, WKNavigationDelegate {
     static let zoomSteps: [Double] = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3]
 
-    let webView: WKWebView
+    let webView: FileDropWebView
     let preferences: Preferences
     /// The first page has finished loading: time to show it.
     var onFirstPaint: (() -> Void)?
@@ -26,7 +26,7 @@ final class WebPage: NSObject, WKNavigationDelegate {
         let configuration = WKWebViewConfiguration()
         configuration.mediaTypesRequiringUserActionForPlayback = []  // narrations play at once
         configuration.websiteDataStore = .default()
-        webView = WKWebView(frame: .zero, configuration: configuration)
+        webView = FileDropWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true
         webView.allowsMagnification = true
         webView.underPageBackgroundColor = Paper.background

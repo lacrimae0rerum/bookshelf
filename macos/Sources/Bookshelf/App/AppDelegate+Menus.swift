@@ -105,6 +105,8 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
             return supervisor.phase == .ready || supervisor.phase == .failed
         case #selector(restartAPI(_:)), #selector(rebuildWeb(_:)), #selector(openAPIDocs(_:)):
             return ready
+        case #selector(addToLibrary(_:)), #selector(addWebArticle(_:)):
+            return Self.canAddToLibrary(phase: supervisor.phase, sheetOpen: windowController?.window?.attachedSheet != nil)
         case #selector(toggleJobQueue(_:)):
             item.title = lastQueue?.paused == true ? "Resume Job Queue" : "Pause Job Queue"
             return ready
@@ -113,6 +115,12 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
         default:
             return true
         }
+    }
+
+    /// ⌘O and ⇧⌘O post to the API, so they wait for the services. Not while a sheet is on
+    /// the window either: a second panel would queue, unseen, behind the open one.
+    static func canAddToLibrary(phase: Supervisor.Phase, sheetOpen: Bool) -> Bool {
+        phase == .ready && !sheetOpen
     }
 
     // MARK: Server menu status lines
