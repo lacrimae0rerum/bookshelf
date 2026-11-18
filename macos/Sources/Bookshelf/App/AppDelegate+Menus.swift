@@ -36,12 +36,16 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
 
     // MARK: Server
 
+    /// Both restarts stop the API, which runs the jobs: they ask first while jobs run.
     @objc func restartServices(_ sender: Any?) {
-        startServices(restart: true)
+        Task {
+            if await confirmRestart() { startServices(restart: true) }
+        }
     }
 
     @objc func restartAPI(_ sender: Any?) {
         Task {
+            guard await confirmRestart() else { return }
             if let failure = await supervisor.restart(.api) { show(failure) }
         }
     }

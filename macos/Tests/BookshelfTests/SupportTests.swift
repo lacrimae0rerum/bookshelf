@@ -16,6 +16,39 @@ struct LogFilesTests {
         #expect(try String(contentsOf: dir.appending(path: "api.log.1"), encoding: .utf8).hasPrefix("5"))
     }
 
+    /// While the app runs, a service keeps its log open: rotating copies and empties the file,
+    /// and the open handle's next line goes to the start of the emptied file.
+    @Test func rotatesInPlaceUnderAnOpenWriter() throws {
+        let dir = try temporaryDirectory()
+        let log = dir.appending(path: "api.log")
+        let writer = try #require(LogFiles.appendHandle(log))
+        writer.write(Data(String(repeating: "old ", count: 10).utf8))
+        LogFiles.rotate(log, limit: 10, keep: 3, inPlace: true)
+        writer.write(Data("new\n".utf8))
+        try writer.close()
+        #expect(try String(contentsOf: log, encoding: .utf8) == "new\n")
+        #expect(try String(contentsOf: dir.appending(path: "api.log.1"), encoding: .utf8) == String(repeating: "old ", count: 10))
+    }
+
+    @Test func appendsAfterWhatTheLogHolds() throws {
+        let log = try temporaryDirectory().appending(path: "app.log")
+        try "first\n".write(to: log, atomically: true, encoding: .utf8)
+        let writer = try #require(LogFiles.appendHandle(log))
+        writer.write(Data("second\n".utf8))
+        try writer.close()
+        #expect(try String(contentsOf: log, encoding: .utf8) == "first\nsecond\n")
+    }
+
+    @Test func rotatesOnScheduleWhileRunning() async throws {
+        let dir = try temporaryDirectory()
+        let log = dir.appending(path: "web.log")
+        try String(repeating: "x", count: 11_000_000).write(to: log, atomically: true, encoding: .utf8)
+        let task = LogFiles.rotateWhileRunning([log], every: .milliseconds(20))
+        defer { task.cancel() }
+        #expect(eventually { FileManager.default.fileExists(atPath: dir.appending(path: "web.log.1").path) })
+        #expect(eventually { ((try? FileManager.default.attributesOfItem(atPath: log.path))?[.size] as? Int) == 0 })
+    }
+
     @Test func leavesASmallLogAlone() throws {
         let log = try temporaryDirectory().appending(path: "web.log")
         try "short".write(to: log, atomically: true, encoding: .utf8)
