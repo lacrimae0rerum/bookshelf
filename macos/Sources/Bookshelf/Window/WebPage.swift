@@ -16,6 +16,8 @@ final class WebPage: NSObject, WKNavigationDelegate {
     var onLoadFailure: ((String) -> Void)?
     /// The web content process crashed twice within a minute.
     var onRepeatedCrash: (() -> Void)?
+    /// The page asked for something only the app can do (`PageMessage`).
+    var onMessage: ((PageMessage) -> Void)?
 
     private(set) var painted = false
     private var lastCrash: ContinuousClock.Instant?
@@ -33,6 +35,10 @@ final class WebPage: NSObject, WKNavigationDelegate {
         webView.pageZoom = preferences.pageZoom
         webView.isInspectable = preferences.webInspectorEnabled
         super.init()
+        configuration.userContentController.add(
+            PageMessageHandler { [weak self] message in self?.onMessage?(message) },
+            name: PageMessage.handlerName
+        )
         webView.navigationDelegate = self
         webView.uiDelegate = self
         observations = [

@@ -18,6 +18,12 @@ extension AppDelegate: IntakePresenter {
     /// File → Add to Library… (⌘O), and the menu bar icon's menu: one or more files of the
     /// types intake takes. Activates the app, or the panel would open behind the active one.
     @objc func addToLibrary(_ sender: Any?) {
+        chooseFiles(genre: nil)
+    }
+
+    /// The open panel, then intake: ⌘O, the menu bar icon, and the web's "Add a book"
+    /// dialog (*Choose files…*, with its "Add as" genre).
+    func chooseFiles(genre: String?) {
         guard let window = frontMainWindow(activating: true) else { return }
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
@@ -28,7 +34,7 @@ extension AppDelegate: IntakePresenter {
         panel.message = "Bookshelf copies the files into library/inbox and adds them to the shelf."
         Task {
             guard await panel.beginSheetModal(for: window) == .OK else { return }
-            intake.receive(panel.urls)
+            intake.receive(panel.urls, genre: genre)
         }
     }
 

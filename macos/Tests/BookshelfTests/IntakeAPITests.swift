@@ -14,6 +14,11 @@ struct IntakeAPITests {
         #expect(try body(of: request) == ["path": "inbox/2026-11/Meadows Systems.pdf"])
     }
 
+    @Test func aFileCarriesTheGenreChosenInTheDialog() throws {
+        let request = IntakeAPI.request(.libraryPath("inbox/2026-11/attention.pdf", genre: "paper"))
+        #expect(try body(of: request) == ["path": "inbox/2026-11/attention.pdf", "genre": "paper"])
+    }
+
     @Test func aWebArticleSendsItsURL() throws {
         let request = IntakeAPI.request(.webURL(URL(string: "https://example.com/essay?id=3")!))
         #expect(request.httpMethod == "POST")

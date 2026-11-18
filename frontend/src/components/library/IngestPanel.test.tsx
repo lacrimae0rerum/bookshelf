@@ -119,6 +119,24 @@ describe('<IngestPanel>', () => {
     expect(await screen.findByText('https://example.com/essay')).toBeTruthy();
   });
 
+  it('offers no file panel in a browser', () => {
+    render(<IngestPanel initialFiles={[]} />);
+    expect(screen.queryByRole('button', { name: 'Choose files…' })).toBeNull();
+  });
+
+  it('inside Bookshelf.app, asks the app for its file panel with the chosen genre', async () => {
+    const postMessage = vi.fn();
+    Object.assign(window, { webkit: { messageHandlers: { bookshelf: { postMessage } } } });
+    try {
+      render(<IngestPanel initialFiles={[]} />);
+      await userEvent.selectOptions(screen.getByLabelText('Add as'), 'paper');
+      await userEvent.click(await screen.findByRole('button', { name: 'Choose files…' }));
+      expect(postMessage).toHaveBeenCalledWith({ action: 'addFiles', genre: 'paper' });
+    } finally {
+      delete (window as { webkit?: unknown }).webkit;
+    }
+  });
+
   it('says why when the library folder cannot be listed', async () => {
     api.get.mockRejectedValue(new ApiError({ status: 502, code: 'upstream_unavailable', message: 'The API could not be reached.', requestId: 'r1' }));
     render(<IngestPanel initialFiles={null} />);
