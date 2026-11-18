@@ -32,6 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var quitting = false
     private var poweringOff = false
     private var signalSource: DispatchSourceSignal?
+    /// Keeps the logs under 10 MB while the app runs (§16).
+    private var logRotation: Task<Void, Never>?
 
     init(smoke: SmokeReport) {
         self.smoke = smoke
@@ -50,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try? paths.createDirectories()
         for name in LogName.allCases { LogFiles.rotate(paths.log(name)) }
         AppLogFile.shared.open(paths.log(.app))
+        logRotation = LogFiles.rotateWhileRunning(LogName.allCases.map(paths.log))
         let info = Bundle.main.infoDictionary ?? [:]
         Log.info("launch: Bookshelf \(info["CFBundleShortVersionString"] ?? "dev") (\(info["BookshelfCommit"] ?? "no commit")), pid \(getpid()), \(ProcessInfo.processInfo.operatingSystemVersionString)")
 
@@ -164,8 +167,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func finishQuit() async {
         if !poweringOff, preferences.confirmQuitWhileJobsRun, supervisor.phase == .ready,
-           let queue = await JobsAPI.queue(timeout: 1), queue.running > 0,
-           await !confirmQuit(running: queue.running) {
+           let queue = await JobsAPI.queue(timeout: 1),
+           JobsInterruption.mustAsk(phase: supervisor.phase, queue: queue),
+           await !confirm(.quit, running: queue.running) {
             quitting = false
             NSApp.reply(toApplicationShouldTerminate: false)
             return
@@ -176,22 +180,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.info("quit: services stopped in \(since.duration(to: .now))")
         smoke.record("stopped")
         NSApp.reply(toApplicationShouldTerminate: true)
-    }
-
-    private func confirmQuit(running: Int) async -> Bool {
-        let alert = NSAlert()
-        alert.messageText = running == 1 ? "1 job is running. Quit anyway?" : "\(running) jobs are running. Quit anyway?"
-        alert.informativeText = "They go back to the queue and run again next time."
-        alert.addButton(withTitle: "Quit")
-        alert.addButton(withTitle: "Cancel")
-        alert.showsSuppressionButton = true
-        alert.suppressionButton?.title = "Don't ask again"
-        // In front of every app: Quit from the menu bar icon comes while another one is active,
-        // and a sheet behind it would hold the quit unseen.
-        guard let window = frontMainWindow(activating: true) else { return true }
-        let quit = await alert.beginSheetModal(for: window) == .alertFirstButtonReturn  // a sheet, never runModal
-        if quit, alert.suppressionButton?.state == .on { preferences.confirmQuitWhileJobsRun = false }
-        return quit
     }
 
     /// SIGTERM (`kill <pid>`, `install-app.sh`) quits as ⌘Q does. A no-op handler, not

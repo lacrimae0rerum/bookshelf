@@ -238,6 +238,10 @@ Shortcuts the web already uses stay with the web: **⌘K** (search) and **⌘↩
 | **View** | Reload ⌘R · Actual Size ⌘0 · Zoom In ⌘+ · Zoom Out ⌘- · Enter Full Screen ⌃⌘F · Web Inspector ⌥⌘I (when enabled) |
 | **Go** | Back ⌘[ · Forward ⌘] · Today ⌘1 · Library ⌘2 · Papers ⌘3 · Pills ⌘4 · Review ⌘5 · Pipeline ⌘6 · Shelf Settings (the web's `/settings`) |
 | **Server** | Status lines (Database, API, Web, Jobs) · Restart Services ⌥⌘R · Restart API · Rebuild Web · Pause / Resume Job Queue · Reveal Library in Finder · Open API Docs (browser) · Show Logs |
+
+Restart Services and Restart API stop the API, which runs the jobs. While jobs run they ask
+first, as quit does, with a sheet: "2 jobs are running. Restart anyway?" (Restart / Cancel, no
+"Don't ask again"). The menu bar icon's Restart Services asks the same.
 | **Window** | Minimize ⌘M · Zoom · Bring All to Front |
 | **Help** | Bookshelf README · Show Logs |
 
@@ -414,7 +418,10 @@ that terminal.
 
 - `~/Library/Logs/Bookshelf/`: `app.log` (supervisor, intake, errors), `api.log` (the API's
   JSON lines), `web.log`, `web-build.log`, `setup.log` (uv sync, migrate, pnpm install).
-  Postgres keeps its own `.pgdata/server.log`. Files rotate at launch above 10 MB, three kept.
+  Postgres keeps its own `.pgdata/server.log`. Files rotate above 10 MB, three kept: at
+  launch the file is moved; while the app runs it is checked every 10 minutes, copied to
+  `x.log.1` and emptied, because the services keep it open (every writer appends, so the
+  next line lands at the start; a line written between the copy and the emptying is lost).
 - The app also logs through `os.Logger` (subsystem = bundle id; categories `supervisor`,
   `window`, `intake`), visible in Console.app.
 - *Copy Diagnostics* puts on the clipboard: app version and commit, macOS version, repo

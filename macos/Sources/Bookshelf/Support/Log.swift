@@ -42,19 +42,21 @@ final class AppLogFile: @unchecked Sendable {
 
 /// Opening, rotating and reading the tail of log files.
 enum LogFiles {
-    /// A handle that appends to `url`, creating the file if needed.
+    /// A handle that appends to `url` (`O_APPEND`), creating the file if needed. Every write
+    /// lands at the end, so a file emptied by `rotate(inPlace:)` is written from its start.
     static func appendHandle(_ url: URL) -> FileHandle? {
-        if !FileManager.default.fileExists(atPath: url.path) {
-            FileManager.default.createFile(atPath: url.path, contents: nil)
-        }
-        guard let handle = try? FileHandle(forWritingTo: url) else { return nil }
-        _ = try? handle.seekToEnd()
-        return handle
+        let fd = open(url.path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0o644)
+        guard fd >= 0 else { return nil }
+        return FileHandle(fileDescriptor: fd, closeOnDealloc: true)
     }
 
     /// Above `limit` bytes: `x.log` → `x.log.1` → … → `x.log.<keep>`; the oldest is dropped.
-    /// Run at launch, before anything writes (§16).
-    static func rotate(_ url: URL, limit: Int = 10_000_000, keep: Int = 3) {
+    /// At launch, before anything writes, the file is moved (§16). `inPlace`, while the
+    /// services run: the file is copied to `x.log.1` and emptied, because the services keep
+    /// it open and a moved file would go on growing under its new name. Every writer appends
+    /// (`O_APPEND`), so the next line goes to the start of the emptied file; a line written
+    /// between the copy and the emptying is lost.
+    static func rotate(_ url: URL, limit: Int = 10_000_000, keep: Int = 3, inPlace: Bool = false) {
         let fm = FileManager.default
         guard let size = (try? fm.attributesOfItem(atPath: url.path))?[.size] as? Int, size > limit else { return }
         let numbered = { (n: Int) in URL(fileURLWithPath: "\(url.path).\(n)") }
@@ -62,7 +64,22 @@ enum LogFiles {
         for n in stride(from: keep - 1, through: 1, by: -1) where fm.fileExists(atPath: numbered(n).path) {
             try? fm.moveItem(at: numbered(n), to: numbered(n + 1))
         }
-        try? fm.moveItem(at: url, to: numbered(1))
+        if inPlace {
+            guard (try? fm.copyItem(at: url, to: numbered(1))) != nil else { return }
+            truncate(url.path, 0)
+        } else {
+            try? fm.moveItem(at: url, to: numbered(1))
+        }
+    }
+
+    /// `rotate(inPlace: true)` for each log every `interval`, while the app runs; cancel the
+    /// task to stop it.
+    static func rotateWhileRunning(_ logs: [URL], every interval: Duration = .seconds(600)) -> Task<Void, Never> {
+        Task.detached(priority: .utility) {
+            while (try? await Task.sleep(for: interval)) != nil {
+                for log in logs { rotate(log, inPlace: true) }
+            }
+        }
     }
 
     /// The last `lines` lines of `url` (reads at most the last 64 KB).
