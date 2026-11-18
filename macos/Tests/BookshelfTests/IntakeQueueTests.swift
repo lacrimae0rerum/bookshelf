@@ -23,6 +23,18 @@ struct IntakeQueueTests {
         #expect(presenter.reports.first?.pageToOpen == "/documents/meadows-systems")
     }
 
+    /// The dialog's "Add as" travels with the files, through the wait, to the API.
+    @Test func theGenreGoesInWithItsFiles() async throws {
+        let (source, library) = try sourceAndLibrary("attention.pdf")
+        let api = StubAPI([addedReply])
+        let ready = ReadyFlag()
+        let (intake, _) = makeIntake(api, ready: ready)
+        intake.receive([source], genre: "paper")
+        ready.library = library
+        await intake.resumeIfReady()?.value
+        #expect(api.bodies == [["path": "inbox/2026-11/attention.pdf", "genre": "paper"]])
+    }
+
     @Test func nothingWaitingStartsNothing() {
         let (intake, _) = makeIntake(StubAPI([]), library: URL(fileURLWithPath: "/nonexistent"))
         #expect(intake.resumeIfReady() == nil)

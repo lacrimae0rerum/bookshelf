@@ -5,9 +5,11 @@
  * the copy already on the shelf. An accepted ingest announces `INGESTED_EVENT`.
  * "Add as" sets the genre (book, paper, article) sent with each ingest; left at "detect",
  * a file starts as a book and a URL as an article until the paper detector says otherwise.
+ * Inside Bookshelf.app, "Choose files…" opens the Mac's file panel (`lib/native-app`).
  */
 import { useCallback, useEffect, useMemo, useState, type SubmitEvent } from 'react';
 import { browserApi } from '../../lib/api/client';
+import { chooseFilesInApp, inNativeApp } from '../../lib/native-app';
 import type { Page } from '../../lib/api/types';
 import { GENRE_LABELS, GENRES, type Genre, type LibraryFile } from '../../lib/api/types/documents';
 import type { JobState } from '../../lib/api/types/jobs';
@@ -33,6 +35,9 @@ export function IngestPanel({ initialFiles, initialProblem = null, initialGenre 
   const [problem, setProblem] = useState<ProblemInfo | null>(initialProblem);
   const [outcomes, setOutcomes] = useState<Record<string, Pending>>({});
   const [url, setUrl] = useState('');
+  // After hydration: the server render never runs inside the app's web view.
+  const [native, setNative] = useState(false);
+  useEffect(() => setNative(inNativeApp()), []);
 
   const [watching, setWatching] = useState(false);
   const { jobs, track } = useJobStream({ enabled: watching });
@@ -91,7 +96,9 @@ export function IngestPanel({ initialFiles, initialProblem = null, initialGenre 
           {files === null
             ? 'Looking in library/…'
             : files.length === 0
-              ? 'Every file in library/ is already on the shelf. Drop a PDF, EPUB, HTML or Markdown file there to add it.'
+              ? native
+                ? 'Every file in library/ is already on the shelf. Choose a PDF, EPUB, HTML or Markdown file on your Mac to add it.'
+                : 'Every file in library/ is already on the shelf. Drop a PDF, EPUB, HTML or Markdown file there to add it.'
               : `${files.length} ${files.length === 1 ? 'file is' : 'files are'} waiting in library/.`}
         </p>
       </div>
@@ -107,6 +114,15 @@ export function IngestPanel({ initialFiles, initialProblem = null, initialGenre 
           ))}
         </select>
       </label>
+
+      {native ? (
+        <div className={styles.choose}>
+          <button type="button" className={styles.add} onClick={() => chooseFilesInApp(genre)}>
+            Choose files…
+          </button>
+          <span className={styles.chooseHint}>PDF, EPUB, HTML or Markdown, from anywhere on your Mac.</span>
+        </div>
+      ) : null}
 
       {problem ? <Problem inline title="The library folder could not be listed." problem={problem} /> : null}
 

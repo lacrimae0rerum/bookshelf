@@ -540,6 +540,11 @@ so is the copy when the API does not answer (or the proxy answers `502 upstream_
 only drags from other apps go to intake, and every file drag from one does, so the web's
 snapshot field takes its file through its button; `bookshelf://add` stays with the URL scheme
 (P3). The window drop and the Dock are checked by hand.
+The web's "Add a book" dialog has *Choose files…* inside the app (2026-11-18, Fer): the page
+posts `{"action": "addFiles", "genre": …}` to the `bookshelf` script message handler, which
+takes it only from our origin's main frame (`PageMessage`), and the app opens the same panel as
+⌘O. The dialog's "Add as" travels with the files as the ingest's `genre`. In a browser the
+handler does not exist and the button is not shown.
 
 **Menu bar icon brought forward from P2** (2026-11-06, decision of Fer): §10's icon and its
 menu, without *Settings…*. The menu has the four status lines, *Open Bookshelf*, *Add to

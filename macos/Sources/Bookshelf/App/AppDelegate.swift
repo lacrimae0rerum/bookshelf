@@ -107,6 +107,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         supervisor.onChange = { [weak self] in self?.supervisorChanged() }
         supervisor.onServiceDied = { [weak self] failure in self?.show(failure) }
         page.webView.onFileDrop = { [weak self] files in self?.intake.receive(files) }
+        page.onMessage = { [weak self] message in
+            switch message {
+            case .addFiles(let genre): self?.chooseFiles(genre: genre)
+            }
+        }
         page.onFirstPaint = { [weak self] in self?.pageShown() }
         page.onLoadFailure = { [weak self] message in
             guard let self else { return }

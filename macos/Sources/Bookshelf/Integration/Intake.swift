@@ -33,8 +33,15 @@ struct IntakeLog {
 @MainActor
 final class Intake {
     weak var presenter: IntakePresenter?
+    /// A file and the genre it goes in as (`nil`: the API detects it).
+    struct Entry: Equatable {
+        let file: URL
+        let genre: String?
+    }
+
     /// Files waiting for the services, in the order they came.
-    private(set) var pending: [URL] = []
+    private(set) var queued: [Entry] = []
+    var pending: [URL] { queued.map(\.file) }
 
     private let send: HTTPSend
     /// `library/` while the services are ready, `nil` otherwise.
@@ -59,8 +66,8 @@ final class Intake {
     /// Every file entry point. Queues `files`, then starts a batch if the services are
     /// ready: its task, or `nil` when the files wait or a running batch takes them.
     @discardableResult
-    func receive(_ files: [URL]) -> Task<Void, Never>? {
-        pending += files
+    func receive(_ files: [URL], genre: String? = nil) -> Task<Void, Never>? {
+        queued += files.map { Entry(file: $0, genre: genre) }
         if !files.isEmpty, readyLibrary() == nil {
             log.info("intake: \(files.count) file(s) wait for the services")
         }
@@ -71,7 +78,7 @@ final class Intake {
     /// Called on every supervisor change, so what waited goes in once they are ready.
     @discardableResult
     func resumeIfReady() -> Task<Void, Never>? {
-        guard !draining, !pending.isEmpty, readyLibrary() != nil else { return nil }
+        guard !draining, !queued.isEmpty, readyLibrary() != nil else { return nil }
         draining = true  // now, not in the task: a second call meanwhile starts nothing
         return Task { await drain() }
     }
@@ -87,18 +94,18 @@ final class Intake {
     /// make the next batch, after the person has seen this one's notice.
     private func drain() async {
         defer { draining = false }
-        while !pending.isEmpty, readyLibrary() != nil {
-            let batch = pending
-            pending.removeAll()
+        while !queued.isEmpty, readyLibrary() != nil {
+            let batch = queued
+            queued.removeAll()
             var results: [IntakeResult] = []
-            for (index, file) in batch.enumerated() {
+            for (index, entry) in batch.enumerated() {
                 // Before each file: the services can stop mid-batch (a restart, a crash).
                 guard let library = readyLibrary() else {
-                    pending.insert(contentsOf: batch[index...], at: 0)
+                    queued.insert(contentsOf: batch[index...], at: 0)
                     log.info("intake: the services stopped; \(batch.count - index) file(s) wait again")
                     break
                 }
-                results.append(await ingest(file, library: library))
+                results.append(await ingest(entry.file, genre: entry.genre, library: library))
             }
             if !results.isEmpty {
                 await presenter?.present(.summarizing(results))
@@ -106,7 +113,7 @@ final class Intake {
         }
     }
 
-    private func ingest(_ file: URL, library: URL) async -> IntakeResult {
+    private func ingest(_ file: URL, genre: String?, library: URL) async -> IntakeResult {
         let name = file.lastPathComponent
         guard IntakeFiles.isAccepted(file) else {
             log.info("intake: \(name): \(IntakeOutcome.unsupported)")
@@ -119,7 +126,7 @@ final class Intake {
             log.error("intake: \(name): copy failed (\(IntakeLog.code(of: error)))")
             return IntakeResult(name: name, outcome: .failed("It could not be copied into the library: \(error.localizedDescription)"))
         }
-        var outcome = IntakeAPI.outcome(of: await send(IntakeAPI.request(.libraryPath(copy.libraryPath))))
+        var outcome = IntakeAPI.outcome(of: await send(IntakeAPI.request(.libraryPath(copy.libraryPath, genre: genre))))
         switch outcome {
         case .duplicate, .failed: delete(copy, of: name)  // §13: the shelf has it, or the API said no
         case .unanswered: outcome = .unanswered(keptAt: copy.libraryPath)  // it may have been taken

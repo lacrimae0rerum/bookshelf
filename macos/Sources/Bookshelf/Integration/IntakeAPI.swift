@@ -52,8 +52,9 @@ enum IntakeAPI {
     static let documentsURL = Loopback.webOrigin.appending(path: "api/documents")
 
     enum Source: Equatable, Sendable {
-        /// Relative to `library/`, as the API requires: `inbox/2026-11/x.pdf`.
-        case libraryPath(String)
+        /// Relative to `library/`, as the API requires: `inbox/2026-11/x.pdf`. `genre`:
+        /// `book`, `paper` or `article`; `nil` lets the API detect it.
+        case libraryPath(String, genre: String? = nil)
         case webURL(URL)
     }
 
@@ -74,7 +75,7 @@ enum IntakeAPI {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue(Loopback.webOrigin.absoluteString, forHTTPHeaderField: "Origin")
         let body = switch source {
-        case .libraryPath(let path): ["path": path]
+        case .libraryPath(let path, let genre): ["path": path, "genre": genre].compactMapValues { $0 }
         case .webURL(let url): ["url": url.absoluteString]
         }
         request.httpBody = try? JSONEncoder().encode(body)

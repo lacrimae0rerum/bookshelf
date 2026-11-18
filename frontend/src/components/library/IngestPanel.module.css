@@ -95,6 +95,18 @@
   background: var(--accent-strong);
 }
 
+.choose {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.chooseHint {
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+}
+
 .urlRow .add {
   height: 2.5rem;
 }
