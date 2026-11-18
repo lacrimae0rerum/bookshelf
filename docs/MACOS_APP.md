@@ -1,6 +1,6 @@
 # Bookshelf for macOS — a native launcher
 
-**Status**: accepted; P0 and P1 done, P2 next · **Date**: 2026-11-03 · **Extends**: [ARCHITECTURE.md](ARCHITECTURE.md) · **Decision**: [ADR-001](adr/ADR-001-native-macos-launcher-for-bookshelf.md)
+**Status**: accepted; P0 and P1 done, plus intake, the menu bar icon and *Choose files…* brought forward from P2. Closed on 2026-11-18 (Fer): the rest of P2 and P3 are not planned · **Date**: 2026-11-03 · **Extends**: [ARCHITECTURE.md](ARCHITECTURE.md) · **Decision**: [ADR-001](adr/ADR-001-native-macos-launcher-for-bookshelf.md)
 
 `Bookshelf.app` is a small native app for one Mac. Opening it starts the three local services
 (Postgres, the FastAPI API, the Astro server), shows the web UI in its own window, and stops
