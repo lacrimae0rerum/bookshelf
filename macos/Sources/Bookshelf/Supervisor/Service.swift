@@ -29,14 +29,18 @@ struct LaunchSpec: Sendable, Equatable {
     let port: UInt16
     let readyTimeout: Duration
 
-    /// `uv run fastapi run app/main.py --host 127.0.0.1 --port 8000` in `backend/`.
+    /// `uv run fastapi run app/main.py --host 127.0.0.1 --port 8000` in `backend/`. With no
+    /// rate limit: it listens on the loopback only, where the web's server, the page and the
+    /// menu bar icon all count as one client (127.0.0.1), and one library page alone makes
+    /// about seven calls, so 120 a minute ran out in ordinary browsing (Fer, 2026-11-18). An
+    /// environment variable wins over `.env`, so a hosted deploy keeps its limit.
     static func api(repo: Repository, tools: Tools) -> LaunchSpec {
         LaunchSpec(
             id: .api,
             argv: [tools.uv, "run", "fastapi", "run", "app/main.py", "--host", Loopback.host, "--port", "\(Loopback.apiPort)"],
             cwd: repo.backend,
             log: .api,
-            extraEnv: [:],
+            extraEnv: ["BOOKSHELF_RATE_LIMIT_REQUESTS": "0"],
             readyURL: URL(string: "http://127.0.0.1:\(Loopback.apiPort)/health/ready")!,
             port: Loopback.apiPort,
             readyTimeout: .seconds(60)

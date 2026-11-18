@@ -13,6 +13,7 @@ struct LaunchSpecTests {
         #expect(spec.cwd.path == "/repo/backend")
         #expect(spec.readyURL.absoluteString == "http://127.0.0.1:8000/health/ready")
         #expect(spec.log == .api)
+        #expect(spec.extraEnv == ["BOOKSHELF_RATE_LIMIT_REQUESTS": "0"])  // loopback only: no limit
     }
 
     @Test func theWebRunsCompiledWithItsAddressesSet() {

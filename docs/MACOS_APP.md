@@ -126,7 +126,7 @@ or the known tool paths is ours and is stopped. Anything else on the port is for
 | Postgres | `scripts/pg-local.sh start` (repo) | the script exits 0 and port 54329 accepts | `scripts/pg-local.sh stop` |
 | Backend deps | `uv sync` (`backend/`) | exit 0 | — |
 | Migrations | `uv run python -m app.db.migrate` (`backend/`) | exit 0 | — |
-| API | `uv run fastapi run app/main.py --host 127.0.0.1 --port 8000` (`backend/`) | `GET /health/ready` is 200 | guard: SIGTERM to the command → 5 s → SIGINT → 1 s → SIGKILL group |
+| API | `uv run fastapi run app/main.py --host 127.0.0.1 --port 8000` (`backend/`), with `BOOKSHELF_RATE_LIMIT_REQUESTS=0`: on the loopback every caller is `127.0.0.1`, one client, and a library page makes about seven calls, so 120 a minute ran out while browsing (Fer, 2026-11-18) | `GET /health/ready` is 200 | guard: SIGTERM to the command → 5 s → SIGINT → 1 s → SIGKILL group |
 | Frontend deps | `pnpm install --frozen-lockfile` (`frontend/`) | exit 0 | — |
 | Web build | `pnpm exec astro build` (`frontend/`) | exit 0 | — |
 | Web | `node --env-file=.env dist/server/entry.mjs` (`frontend/`), with `HOST=127.0.0.1 PORT=4321 API_INTERNAL_URL=http://127.0.0.1:8000/api/v1` | `GET /` is 200 | guard: SIGTERM to the command → 5 s → SIGINT → 1 s → SIGKILL group |
